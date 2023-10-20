@@ -3,6 +3,7 @@ from .djinn import djinn
 from .utils import get_bolded_text, get_os_info, print_text
 import argparse
 import os
+from pathlib import Path
 
 def code_djinn():
     parser = argparse.ArgumentParser(prog="code_djinn", description="An AI CLI assistant")
@@ -43,6 +44,8 @@ def code_djinn():
 def init():
 
     os_family, os_fullname = get_os_info()
+    app_dir = os.path.dirname(os.path.realpath(__file__))
+    env_path = Path(app_dir) / ".env"
 
     if os_family:
         print_text(f"Detected OS: {os_fullname} \n", color="green")
@@ -76,7 +79,7 @@ def init():
     print(config)
 
     for key, value in config.items():
-        set_key(".env", key, value)
+        set_key(env_path, key, value)
 
 
 def ask(
@@ -84,7 +87,10 @@ def ask(
     explain: bool = False,
     llm_verbose: bool = False
     ):
-    config = dotenv_values()
+    app_dir = os.path.dirname(os.path.realpath(__file__))
+    env_path = Path(app_dir) / ".env"
+
+    config = dotenv_values(env_path)
     thedjinn = djinn(os_fullname=config['OS_FULLNAME'],
                      shell=config['SHELL'],
                      api=config['DEEPINFRA_API_TOKEN'])
