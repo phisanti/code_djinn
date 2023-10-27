@@ -86,8 +86,9 @@ def init():
         "DEEPINFRA_API_TOKEN": api_key
     } 
 
-    print("The following configuration will be saved:")
+    print_text("The following configuration will be saved: \n", "red")
     print_text(config, "red")
+    print("\n")
     print_text(f"Config file saved at {env_path}", "green")
 
     for key, value in config.items():
