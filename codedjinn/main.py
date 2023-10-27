@@ -1,11 +1,17 @@
+import sys
+import os
+import argparse
 from dotenv import set_key, dotenv_values
 from .djinn import djinn
 from .utils import get_bolded_text, get_os_info, print_text
-import argparse
-import os
 from pathlib import Path
 
 def code_djinn():
+
+    """" 
+    Parser for the code_djinn CLI    
+    """
+    
     parser = argparse.ArgumentParser(prog="code_djinn", description="An AI CLI assistant")
     parser.add_argument("-i", "--init", action="store_true", help="Initialize the configuration")
     parser.add_argument("-a", "--ask", metavar="WISH", type=str, nargs="?", help="Get a shell command for the given wish")
@@ -13,8 +19,8 @@ def code_djinn():
     parser.add_argument("-e", "--explain", action="store_true", default=False, help="Also provide an explanation for the command")
     parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Verbose output from AI")
     
+    # Parse commands
     args = parser.parse_args()
-    # Run the command
     if args.init:
         init()
     elif args.test:
@@ -43,8 +49,12 @@ def code_djinn():
 
 def init():
 
+    """"
+    Initialize the configuration to get the variables os_family, shell and api_key
+    """
+
     os_family, os_fullname = get_os_info()
-    app_dir = os.path.dirname(os.path.realpath(__file__))
+    app_dir = os.path.dirname(sys.modules[__name__].__file__)
     env_path = Path(app_dir) / ".env"
 
     if os_family:
@@ -64,10 +74,11 @@ def init():
         elif "fish" in shell_str:
             shell = "fish"
         else:
-            shell = input("What shell are you using?")
+            shell = input("What shell are you using? ")
     
     api_key = input("What is your DeepInfra API key? ")
 
+    # Save config
     config = {
         "OS": os_family,
         "OS_FULLNAME": os_fullname,
@@ -76,7 +87,8 @@ def init():
     } 
 
     print("The following configuration will be saved:")
-    print(config)
+    print_text(config, "red")
+    print_text(f"Config file saved at {env_path}", "green")
 
     for key, value in config.items():
         set_key(env_path, key, value)
@@ -87,18 +99,28 @@ def ask(
     explain: bool = False,
     llm_verbose: bool = False
     ):
-    app_dir = os.path.dirname(os.path.realpath(__file__))
-    env_path = Path(app_dir) / ".env"
 
+    """"
+    Ask the djinn for a command, main tool of the CLI
+    """
+    # Load vars
+    app_dir = os.path.dirname(sys.modules[__name__].__file__)
+    env_path = Path(app_dir) / ".env"
     config = dotenv_values(env_path)
+    
+    # Init dinnn
     thedjinn = djinn(os_fullname=config['OS_FULLNAME'],
                      shell=config['SHELL'],
                      api=config['DEEPINFRA_API_TOKEN'])
+    
+    # Request command
     try:
         command, description = thedjinn.ask(wish, explain, llm_verbose)
     except Exception as e:
         print_text(f"Error: {e}", "red")
         return
+
+    # Deal with response
     if command:
         print("\n")
         print_text(command, "blue")
@@ -108,7 +130,9 @@ def ask(
 def test(    wish: str,
     explain: bool = False
     ):
-    
+    """"
+    Test the promt for a given wish
+    """
     config = dotenv_values()
     thedjinn = djinn(os_fullname=config['OS_FULLNAME'],
                      shell=config['SHELL'],
