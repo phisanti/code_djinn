@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple, Union
 from dotenv import dotenv_values, set_key
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
@@ -22,15 +22,19 @@ class djinn():
         
         if os_fullname is None or shell is None:
             os_fullname, shell = get_os_info()
-        if api is not None:
-            config=dotenv_values()
-            api=config['DEEPINFRA_API_TOKEN']
+            
+        # Use provided API key if available, otherwise load from .env
+        if api is None:
+            config = dotenv_values()
+            if 'DEEPINFRA_API_TOKEN' in config:
+                api = config['DEEPINFRA_API_TOKEN']
+            else:
+                raise ValueError("No API key provided and DEEPINFRA_API_TOKEN not found in .env file")
+                
         self.os_fullname = os_fullname
         self.shell = shell
         self.llm = DeepInfra(model_id="mistralai/Mistral-7B-Instruct-v0.1", 
                              deepinfra_api_token=api)
-
-        return None
         
     def _build_prompt(self, explain: bool = False):
         """
@@ -64,13 +68,15 @@ class djinn():
 
         return promt_text
 
-    def ask(self, wish: str, explain: bool = False, llm_verbose: bool = False):
-
+    def ask(self, wish: str, explain: bool = False, llm_verbose: bool = False) -> Union[Tuple[str, Optional[str]], str]:
         """
         This function generates a command using the DeepInfra API. It takes the following parameters:
         wish: The command the user wants to generate.
         explain: A boolean value that indicates whether the user wants to provide an explanation of how the command works. If True, the prompt will include a description of the command.
         llm_verbose: A boolean value that indicates whether the user wants to see the output of the LLM model. If True, the output of the LLM model will be printed.
+        
+        Returns:
+            Either a tuple of (command, description) or just the command string if no description is available
         """
         
         if explain:
@@ -82,23 +88,26 @@ class djinn():
                             'max_new_tokens': max_tokens, 'top_p': 0.9}
         prompt = self._build_prompt(explain)
 
-        llm_chain = LLMChain(prompt=prompt,llm=self.llm, verbose=llm_verbose)
-        response = llm_chain.run(wish)
-        responses_items = response.strip().split("\n")
+        try:
+            llm_chain = LLMChain(prompt=prompt, llm=self.llm, verbose=llm_verbose)
+            response = llm_chain.run(wish)
+            responses_items = response.strip().split("\n")
 
-        command = None
-        description = None
-        for element in responses_items:
-            if "command:" in element.lower():
-                command = element
-                command.replace("Command: ", "").strip()
+            command = None
+            description = None
+            for element in responses_items:
+                if "command:" in element.lower():
+                    command = element.replace("Command:", "").strip()
+                elif "description:" in element.lower():
+                    description = element.replace("Description:", "").strip()
 
-            elif "description:" in element.lower():
-                description = element
-                description.replace("Description: ", "").strip()
+            if command is None:
+                raise ValueError("Failed to extract command from LLM response")
 
-            if command is not None and description is not None:
-
-                return response
-
-        return command, description
+            if description is not None:
+                return command, description
+            else:
+                return command, None
+                
+        except Exception as e:
+            raise RuntimeError(f"Error generating command: {str(e)}")

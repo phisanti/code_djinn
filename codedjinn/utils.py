@@ -1,16 +1,30 @@
-from typing import Dict, List, Optional, TextIO
+from typing import Dict, List, Optional, TextIO, Tuple
 import platform
 
-def get_os_info():
-    oper_sys = platform.system()
-    if oper_sys == "Windows" or oper_sys == "Darwin":
-        oper_sys = "MacOS" if oper_sys == "Darwin" else "Windows"
-        return (oper_sys, platform.platform(aliased=True, terse=True))
-    if oper_sys == "Linux":
-        return (oper_sys, platform.freedesktop_os_release()["PRETTY_NAME"])
-    return (None, None)
+def get_os_info() -> Tuple[Optional[str], Optional[str]]:
+    """
+    Get information about the operating system.
+    
+    Returns:
+        A tuple containing (operating system name, operating system details)
+    """
+    try:
+        oper_sys = platform.system()
+        if oper_sys == "Darwin":
+            return ("MacOS", platform.platform(aliased=True, terse=True))
+        elif oper_sys == "Windows":
+            return (oper_sys, platform.platform(aliased=True, terse=True))
+        elif oper_sys == "Linux":
+            try:
+                return (oper_sys, platform.freedesktop_os_release()["PRETTY_NAME"])
+            except (AttributeError, KeyError, OSError):
+                return (oper_sys, platform.platform(aliased=True, terse=True))
+        return (None, None)
+    except Exception:
+        return (None, None)
 
-_TEXT_COLOR_MAPPING = {
+# Color mapping constant
+TEXT_COLOR_MAPPING = {
     "blue": "36;1",
     "yellow": "33;1",
     "pink": "38;5;200",
@@ -23,7 +37,7 @@ def get_color_mapping(
     items: List[str], excluded_colors: Optional[List] = None
 ) -> Dict[str, str]:
     """Get mapping for items to a support color."""
-    colors = list(_TEXT_COLOR_MAPPING.keys())
+    colors = list(TEXT_COLOR_MAPPING.keys())
     if excluded_colors is not None:
         colors = [c for c in colors if c not in excluded_colors]
     color_mapping = {item: colors[i % len(colors)] for i, item in enumerate(items)}
@@ -31,8 +45,23 @@ def get_color_mapping(
 
 
 def get_colored_text(text: str, color: str) -> str:
-    """Get colored text."""
-    color_str = _TEXT_COLOR_MAPPING[color]
+    """
+    Get colored text.
+    
+    Args:
+        text: The text to color
+        color: The color to use
+        
+    Returns:
+        Colored text string
+        
+    Raises:
+        ValueError: If the specified color is not supported
+    """
+    if color not in TEXT_COLOR_MAPPING:
+        raise ValueError(f"Unsupported color: {color}. Available colors: {', '.join(TEXT_COLOR_MAPPING.keys())}")
+    
+    color_str = TEXT_COLOR_MAPPING[color]
     return f"\u001b[{color_str}m\033[1;3m{text}\u001b[0m"
 
 
@@ -44,8 +73,24 @@ def get_bolded_text(text: str) -> str:
 def print_text(
     text: str, color: Optional[str] = None, end: str = "", file: Optional[TextIO] = None
 ) -> None:
-    """Print text with highlighting and no end characters."""
-    text_to_print = get_colored_text(text, color) if color else text
+    """
+    Print text with highlighting and no end characters.
+    
+    Args:
+        text: The text to print
+        color: Optional color to use
+        end: String to append at the end
+        file: Optional file object to write to
+    """
+    if color:
+        try:
+            text_to_print = get_colored_text(text, color)
+        except ValueError:
+            # Fall back to plain text if color is invalid
+            text_to_print = text
+    else:
+        text_to_print = text
+        
     print(text_to_print, end=end, file=file)
     if file:
-        file.flush() 
+        file.flush()
