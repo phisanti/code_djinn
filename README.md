@@ -1,6 +1,8 @@
 # code_djinn - Your Coding Genie
 Code Djinn is a command-line tool that can help you solve simple code questions. It’s like having a personal coding assistant who understands that “Hello, World!” is more than just a greeting, and that Python has nothing to do with snakes!
 
+Code Djinn leverages fast and efficient LLM models like QwQ, Mistral small, and Gemini flash to provide quick responses to your coding queries. The focus on lightweight models ensures snappy performance and responsiveness, making it a practical tool for your daily coding tasks.
+
 So why spend hours on obscure StackOverflow threads or try to remember arcane CLI commands? Let code_djinn handle the boring stuff so you can focus on building awesome projects! 🧞‍♂️
 
 # Installation

@@ -60,10 +60,6 @@ def code_djinn():
     # Parse commands
     args = parser.parse_args()
 
-    # Enable import timing if profiling is requested
-    if args.profile_imports:
-        os.environ["CODEDJINN_DEBUG"] = "1"
-
     # Handle listing models
     if args.list_models:
         factory = LLMFactory()
