@@ -57,21 +57,31 @@ class djinn:
         # Create LLM using factory for lazy loading
         self.llm = LLMFactory().create_llm(provider, model, api)
 
-    def _build_prompt(self, explain: bool = False):
+    def _build_prompt(self, explain: bool = False) -> PromptTemplate:
         """
-        This function builds the prompt for the LLM. It takes the following parameters:
-        explain: A boolean value that indicates whether the user wants to provide an explanation of how the command works. If True, the prompt will include a description of the command.
+        Build the prompt for the LLM.
+
+        Args:
+            explain: A boolean value that indicates whether the user wants to provide an explanation of how the command works. If True, the prompt will include a description of the command.
+
+        Returns:
+            A PromptTemplate instance configured for command generation
         """
         template = get_command_prompt_template(self.os_fullname, self.shell, explain)
         prompt_variables = ["wish"]
         prompt = PromptTemplate(template=template, input_variables=prompt_variables)
         return prompt
 
-    def test_prompt(self, wish: str, explain: bool = False):
+    def test_prompt(self, wish: str, explain: bool = False) -> str:
         """
-        This function builds the prompt for the LLM. It takes the following parameters:
-        wish: The command the user wants to generate.
-        explain: A boolean value that indicates whether the user wants to provide an explanation of how the command works. If True, the prompt will include a description of the command.
+        Build and format the prompt for the LLM with a given wish.
+
+        Args:
+            wish: The command the user wants to generate
+            explain: A boolean value that indicates whether the user wants to provide an explanation of how the command works. If True, the prompt will include a description of the command.
+
+        Returns:
+            The formatted prompt string ready to be sent to the LLM
         """
         prompt = self._build_prompt(explain)
         promt_text = prompt.format(wish=wish)
@@ -114,21 +124,17 @@ class djinn:
         prompt = self._build_prompt(explain)
 
         try:
-            # Create a runnable sequence using the modern pipe syntax
+            # Create a runnable chain
             chain = prompt | self.llm
-
-            # If verbose is enabled, print the inputs and outputs
             if llm_verbose:
                 print_text("\nSending prompt to LLM:", "yellow")
                 print_text(prompt.format(wish=wish), "blue")
             response = chain.invoke({"wish": wish})
 
-            # Extract the content from the response
+            # Extract the content
             if hasattr(response, "content"):
-                # For chat models that return a message
                 response_text = response.content
             else:
-                # For completion models that return text directly
                 response_text = response
 
             # Parse XML response

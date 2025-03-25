@@ -4,12 +4,13 @@ from .djinn import djinn
 from .utils import get_os_info, print_text
 from .llmfactory import LLMFactory
 from .config import ConfigManager
+from typing import List, Any, Optional
 
 
 def code_djinn():
     """
-    The Djinn class is the main class of the CodeDjinn package.
-    It is used to interact with LLMs and generate commands.
+    Main entry point for the CodeDjinn CLI application.
+    Handles command line argument parsing and routing to appropriate functions.
     """
 
     parser = argparse.ArgumentParser(
@@ -106,14 +107,17 @@ def code_djinn():
         print("Command not recognized. Please use --help for available options.")
 
 
-def get_user_selection(items, prompt):
+def get_user_selection(items: List[Any], prompt: str) -> Optional[Any]:
     """Helper function to display numbered items and get user selection.
 
     Args:
         items: List of items to display
         prompt: Prompt message for user input
+
+    Returns:
+        The selected item from the list, or None if selection fails
     """
-    # Display items horizontally with separator
+
     items_list = " | ".join([f"{i + 1}. {item}" for i, item in enumerate(items)])
     print_text(items_list, "blue")
 
@@ -148,7 +152,7 @@ def init():
             os_family = input("What is your OS family? (e.g. Windows, MacOS, Linux): ")
 
     # Initialize shell with a default value
-    shell = "bash"  # Default value
+    shell = "bash"
 
     if os_family in ("Linux", "MacOS"):
         shell_str = os.environ.get("SHELL", "")
@@ -198,8 +202,13 @@ def init():
 
 
 def ask(wish: str, explain: bool = False, llm_verbose: bool = False):
-    """ "
-    Ask the djinn for a command, main tool of the CLI
+    """
+    Ask the djinn for a command, main tool of the CLI.
+
+    Args:
+        wish: The user's request or command to generate
+        explain: Whether to include an explanation of the command
+        llm_verbose: Whether to show verbose LLM output
     """
     try:
         config_manager = ConfigManager()
@@ -214,7 +223,7 @@ def ask(wish: str, explain: bool = False, llm_verbose: bool = False):
             )
             return
 
-        # Get the appropriate API key based on provider
+        # Get the API key
         provider = config["LLM_PROVIDER"].lower()
         api_key_name = config_manager.get_api_key_name(provider)
 
@@ -243,8 +252,12 @@ def ask(wish: str, explain: bool = False, llm_verbose: bool = False):
 
 
 def test(wish: str, explain: bool = False):
-    """ "
-    Test the promt for a given wish
+    """
+    Test the prompt for a given wish.
+
+    Args:
+        wish: The user's request to test
+        explain: Whether to include an explanation in the prompt
     """
     try:
         config_manager = ConfigManager()
