@@ -1,7 +1,23 @@
-from typing import Dict, List, Optional
-from langchain_community.llms import DeepInfra
-from langchain_mistralai import ChatMistralAI
-from langchain_google_genai import ChatGoogleGenerativeAI
+import importlib
+from typing import Dict, List, Optional, Any
+
+
+class LazyLoader:
+    """Lazily import modules only when they are first used."""
+
+    def __init__(self, import_path: str, module_name: str):
+        self.import_path = import_path
+        self.module_name = module_name
+        self._module = None
+
+    def __call__(self):
+        if self._module is None:
+            try:
+                self._module = importlib.import_module(self.import_path)
+                return self._module
+            except ImportError as e:
+                raise
+        return self._module
 
 
 class LLMFactory:
@@ -12,16 +28,40 @@ class LLMFactory:
 
     def __init__(self):
         """Initialize the factory with available providers and models"""
+        # Create lazy loaders for each provider
+        self._deepinfra_loader = LazyLoader(
+            "langchain_community.llms", "langchain_community.llms"
+        )
+        self._mistralai_loader = LazyLoader(
+            "langchain_mistralai", "langchain_mistralai"
+        )
+        self._gemini_loader = LazyLoader(
+            "langchain_google_genai", "langchain_google_genai"
+        )
+
         self.providers = {
             "deepinfra": {
                 "models": [
                     "Qwen/QwQ-32B",
                     "Qwen/Qwen2.5-Coder-32B-Instruct",
                     "mistralai/Mistral-Small-24B-Instruct-2501",
-                ]
+                ],
+                "loader": self._deepinfra_loader,
+                "class_name": "DeepInfra",
+                "api_param": "deepinfra_api_token",
             },
-            "mistralai": {"models": ["codestral-2501", "mistral-small-2503"]},
-            "gemini": {"models": ["gemini-2.0-flash"]},
+            "mistralai": {
+                "models": ["codestral-2501", "mistral-small-2503"],
+                "loader": self._mistralai_loader,
+                "class_name": "ChatMistralAI",
+                "api_param": "mistral_api_key",
+            },
+            "gemini": {
+                "models": ["gemini-2.0-flash"],
+                "loader": self._gemini_loader,
+                "class_name": "ChatGoogleGenerativeAI",
+                "api_param": "google_api_key",
+            },
         }
 
     def create_llm(self, provider: str, model: str, api_key: str, **kwargs):
@@ -44,26 +84,22 @@ class LLMFactory:
                 f"Provider {provider} not supported. Available providers: {', '.join(self.providers.keys())}"
             )
 
+        provider_info = self.providers[provider]
+
+        if model not in provider_info["models"]:
+            raise ValueError(
+                f"Model {model} not available for {provider}. Available models: {', '.join(provider_info['models'])}"
+            )
+
+        module = provider_info["loader"]()
+        llm_class = getattr(module, provider_info["class_name"])
+        params = {provider_info["api_param"]: api_key}
+
+        # For DeepInfra, use model_id instead of model
         if provider == "deepinfra":
-            if model not in self.providers[provider]["models"]:
-                raise ValueError(
-                    f"Model {model} not available for {provider}. Available models: {', '.join(self.providers[provider]['models'])}"
-                )
-            return DeepInfra(model_id=model, deepinfra_api_token=api_key, **kwargs)
-
-        elif provider == "mistralai":
-            if model not in self.providers[provider]["models"]:
-                raise ValueError(
-                    f"Model {model} not available for {provider}. Available models: {', '.join(self.providers[provider]['models'])}"
-                )
-            return ChatMistralAI(model=model, mistral_api_key=api_key, **kwargs)
-
-        elif provider == "gemini":
-            if model not in self.providers[provider]["models"]:
-                raise ValueError(
-                    f"Model {model} not available for {provider}. Available models: {', '.join(self.providers[provider]['models'])}"
-                )
-            return ChatGoogleGenerativeAI(model=model, google_api_key=api_key, **kwargs)
+            return llm_class(model_id=model, **params, **kwargs)
+        else:
+            return llm_class(model=model, **params, **kwargs)
 
     def get_available_providers(self) -> List[str]:
         """Return a list of available LLM providers"""
@@ -89,11 +125,3 @@ if __name__ == "__main__":
     # Print available models for each provider
     for provider in factory.get_available_providers():
         print(f"Models for {provider}:", factory.get_available_models(provider))
-
-    # Test creating an LLM (this would need a valid API key to fully test)
-    try:
-        # This will fail without a valid API key, but we can test the validation
-        llm = factory.create_llm("deepinfra", "Qwen/QwQ-32B", "fake_api_key")
-        print("LLM created successfully")
-    except Exception as e:
-        print(f"Error creating LLM (expected without valid API key): {e}")

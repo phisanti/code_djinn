@@ -1,11 +1,10 @@
 from typing import Optional, Tuple, Union, Dict, Any
 from dotenv import dotenv_values, set_key
-from langchain_core.runnables import RunnablePassthrough
 from langchain.prompts import PromptTemplate
 from .utils import get_os_info, print_text
 from .llmfactory import LLMFactory
 from .prompt_template import get_command_prompt_template
-import re
+from re import search, DOTALL
 
 
 class djinn:
@@ -55,9 +54,8 @@ class djinn:
         self.provider = provider.lower()
         self.model = model
 
-        # Create LLM using factory
-        factory = LLMFactory()
-        self.llm = factory.create_llm(provider, model, api)
+        # Create LLM using factory for lazy loading
+        self.llm = LLMFactory().create_llm(provider, model, api)
 
     def _build_prompt(self, explain: bool = False):
         """
@@ -118,15 +116,13 @@ class djinn:
         try:
             # Create a runnable sequence using the modern pipe syntax
             chain = prompt | self.llm
-            
+
             # If verbose is enabled, print the inputs and outputs
             if llm_verbose:
                 print_text("\nSending prompt to LLM:", "yellow")
                 print_text(prompt.format(wish=wish), "blue")
-                
-            # Invoke the chain with the wish
             response = chain.invoke({"wish": wish})
-            
+
             # Extract the content from the response
             if hasattr(response, "content"):
                 # For chat models that return a message
@@ -136,13 +132,12 @@ class djinn:
                 response_text = response
 
             # Parse XML response
-            command_match = re.search(r"<command>(.*?)</command>", response_text, re.DOTALL)
-            description_match = re.search(
-                r"<description>(.*?)</description>", response_text, re.DOTALL
+            command_match = search(r"<command>(.*?)</command>", response_text, DOTALL)
+            description_match = search(
+                r"<description>(.*?)</description>", response_text, DOTALL
             )
 
             if not command_match:
-                # Fallback to the old parsing method if XML parsing fails
                 responses_items = response_text.strip().split("\n")
                 command = None
                 description = None

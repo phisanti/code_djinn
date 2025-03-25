@@ -1,4 +1,3 @@
-import sys
 import os
 import argparse
 from .djinn import djinn
@@ -60,6 +59,10 @@ def code_djinn():
     # Parse commands
     args = parser.parse_args()
 
+    # Enable import timing if profiling is requested
+    if args.profile_imports:
+        os.environ["CODEDJINN_DEBUG"] = "1"
+
     # Handle listing models
     if args.list_models:
         factory = LLMFactory()
@@ -70,10 +73,13 @@ def code_djinn():
             if models:
                 print_text("Available models:", "yellow")
                 # Join model names with a separator for clarity
-                model_list = " | ".join([f"{i + 1}. {model}" for i, model in enumerate(models)])
+                model_list = " | ".join(
+                    [f"{i + 1}. {model}" for i, model in enumerate(models)]
+                )
                 print_text(model_list, "pink")
             else:
                 print_text("No models available for this provider.", "red")
+
         return
 
     if args.init:
@@ -102,7 +108,7 @@ def code_djinn():
 
 def get_user_selection(items, prompt):
     """Helper function to display numbered items and get user selection.
-    
+
     Args:
         items: List of items to display
         prompt: Prompt message for user input
