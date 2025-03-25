@@ -1,10 +1,11 @@
 from typing import Dict, List, Optional, TextIO, Tuple
 import platform
 
+
 def get_os_info() -> Tuple[Optional[str], Optional[str]]:
     """
     Get information about the operating system.
-    
+
     Returns:
         A tuple containing (operating system name, operating system details)
     """
@@ -22,6 +23,7 @@ def get_os_info() -> Tuple[Optional[str], Optional[str]]:
         return (None, None)
     except Exception:
         return (None, None)
+
 
 # Color mapping constant
 TEXT_COLOR_MAPPING = {
@@ -47,20 +49,22 @@ def get_color_mapping(
 def get_colored_text(text: str, color: str) -> str:
     """
     Get colored text.
-    
+
     Args:
         text: The text to color
         color: The color to use
-        
+
     Returns:
         Colored text string
-        
+
     Raises:
         ValueError: If the specified color is not supported
     """
     if color not in TEXT_COLOR_MAPPING:
-        raise ValueError(f"Unsupported color: {color}. Available colors: {', '.join(TEXT_COLOR_MAPPING.keys())}")
-    
+        raise ValueError(
+            f"Unsupported color: {color}. Available colors: {', '.join(TEXT_COLOR_MAPPING.keys())}"
+        )
+
     color_str = TEXT_COLOR_MAPPING[color]
     return f"\u001b[{color_str}m\033[1;3m{text}\u001b[0m"
 
@@ -75,7 +79,7 @@ def print_text(
 ) -> None:
     """
     Print text with highlighting and no end characters.
-    
+
     Args:
         text: The text to print
         color: Optional color to use
@@ -90,7 +94,7 @@ def print_text(
             text_to_print = text
     else:
         text_to_print = text
-        
+
     print(text_to_print, end=end, file=file)
     if file:
         file.flush()

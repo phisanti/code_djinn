@@ -1,21 +1,25 @@
-[tool.poetry]
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
 name = "codedjinn"
 version = "0.1.0"
 description = "A CLI tool to solve simple code questions within the terminal using LLM models"
-authors = ["phisanti <tisalon@outlook.com>"]
-license = "MIT"
+authors = [
+    {name = "phisanti", email = "tisalon@outlook.com"}
+]
+license = {text = "MIT"}
 readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "langchain>=0.0.325",
+    "langchain-core>=0.3.0",
+    "langchain-community>=0.0.1",
+    "langchain-mistralai>=0.2.9",
+    "langchain-google-genai>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-langchain = {extras = ["llm"], version = "^0.0.325"}
-python-dotenv = "^1.0.0"
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-
-[tool.poetry.scripts]
-code_djinn = 'codedjinn.main:code_djinn'
+[project.scripts]
+code_djinn = "codedjinn.main:code_djinn"

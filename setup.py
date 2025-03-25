@@ -9,7 +9,11 @@ setup(
     license="MIT",
     packages=find_packages(),
     install_requires=[
-        "langchain[llm]>=0.0.325",
+        "langchain>=0.0.325",
+        "langchain-core>=0.3.0",
+        "langchain-community>=0.0.1",
+        "langchain-mistralai>=0.2.9",
+        "langchain-google-genai>=2.0.0",
         "python-dotenv>=1.0.0",
     ],
     entry_points={
