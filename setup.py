@@ -2,18 +2,16 @@ from setuptools import setup, find_packages
 
 setup(
     name="codedjinn",
-    version="0.1.0",
-    description="A CLI tool to solve simple code questions within the terminal using LLM models",
+    version="0.2.0",
+    description="High-performance CLI assistant for generating shell commands using LLM models",
     author="phisanti",
     author_email="tisalon@outlook.com",
     license="MIT",
     packages=find_packages(),
     install_requires=[
-        "langchain>=0.0.325",
-        "langchain-core>=0.3.0",
-        "langchain-community>=0.0.1",
+        "langchain-community>=0.3.20",
         "langchain-mistralai>=0.2.9",
-        "langchain-google-genai>=2.0.0",
+        "langchain-google-genai>=2.1.1",
         "python-dotenv>=1.0.0",
     ],
     entry_points={
