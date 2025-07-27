@@ -51,7 +51,7 @@ class LLMFactory:
                 "api_param": "deepinfra_api_token",
             },
             "mistralai": {
-                "models": ["codestral-2501", "mistral-small-2503"],
+                "models": ["codestral-latest", "mistral-small-2503"],
                 "loader": self._mistralai_loader,
                 "class_name": "ChatMistralAI",
                 "api_param": "mistral_api_key",
