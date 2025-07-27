@@ -1,26 +1,26 @@
 # code_djinn - Your Coding Genie
-Code Djinn is a command-line tool that can help you solve simple code questions. It’s like having a personal coding assistant who understands that “Hello, World!” is more than just a greeting, and that Python has nothing to do with snakes!
 
-Code Djinn leverages fast and efficient LLM models like QwQ, Mistral small, and Gemini flash to provide quick responses to your coding queries. The focus on lightweight models ensures snappy performance and responsiveness, making it a practical tool for your daily coding tasks.
+Code Djinn is a lightning-fast CLI assistant that generates shell. Code Djinn leverages fast and efficient LLM models like QwQ (Qween), Codestral (Mistral), and Gemini flash (Google) to provide quick responses to your coding queries. The focus on lightweight models ensures snappy performance and responsiveness, making it a practical tool for your daily coding tasks.
 
 So why spend hours on obscure StackOverflow threads or try to remember arcane CLI commands? Let code_djinn handle the boring stuff so you can focus on building awesome projects! 🧞‍♂️
 
 # Installation
 
-Installing Code Djinn is as easy as pie. And not one of those complicated pies, like shepherd's pie. More like an apple pie. Here's how you do it:
+Installing Code Djinn from source via:
 
 ```bash
 pip install git+https://github.com/phisanti/code_djinn.git
 
 ```
-If you see any errors during the installation, it’s probably because the stars are not correctly aligned or you’re not holding your laptop at the right angle. Try turning it off and on again.
 
 # Usage
 
 To use Code Djinn, you need to initialize the configuration first. This is a one-time process that will save your preferences and settings. Here’s how you do it:
+
 ```
 code_djinn --init
 ```
+
 This will prompt you to enter some information, such as:
 
 - Your OS family (e.g. Windows, MacOS, Linux). Code Djinn will try to detect it automatically, but you can also input it manually if it’s wrong.
@@ -29,34 +29,43 @@ This will prompt you to enter some information, such as:
 
 Summon code_djinn by describing what you want to do:
 
-```
-$ code-djinn "How to list files sorted by size"
-```
-code_djinn will think for a few seconds and respond with:
+Generate commands instantly:
 
+```bash
+# Basic command generation
+code_djinn -a "list files by size"
+# Output: ls -lhS
+
+# With explanation
+code_djinn -a -e "find large files"
+
+# Execute with confirmation
+code_djinn -x "show disk usage"
 ```
-ls -lS
+
+## Available Commands
+
+```bash
+# Generate commands
+code_djinn -a "your request"           # Fast command generation
+code_djinn -a -e "your request"        # With explanation
+code_djinn -a -v "your request"        # Verbose LLM output
+
+# Execute commands safely  
+code_djinn -x "your request"           # Generate and execute with confirmation
+
+# Utilities
+code_djinn --init                      # Setup configuration
+code_djinn --list-models              # Show available LLM models
+code_djinn -t "your request"          # Test prompt generation
+code_djinn --clear-cache              # Clear performance cache
 ```
-However, as you know AI models can be a bit temperamental, so you might get something random. Please use code_djinn responsibly!
-For more info, just use the help command:
 
-```
-$ code-djinn --help
-usage: code_djinn [-h] [-i] [-a [WISH]] [-t [WISH]] [-e] [-v]
+## Supported Providers & Models
 
-An AI CLI assistant
-
-options:
-  -h, --help            show this help message and exit
-  -i, --init            Initialize the configuration
-  -a [WISH], --ask [WISH]
-                        Get a shell command for the given wish
-  -t [WISH], --test [WISH]
-                        Test the promt for the given wish
-  -e, --explain         Also provide an explanation for the command
-  -v, --verbose         Verbose output from AI
-
-  ```
+- **DeepInfra**: QwQ-32B, Qwen2.5-Coder-32B, Mistral-Small-24B
+- **MistralAI**: codestral-2501, mistral-small-2503
+- **Google**: gemini-2.0-flash
 
 If you have any doubt, please open an issue!
 
