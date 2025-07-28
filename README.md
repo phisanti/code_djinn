@@ -80,8 +80,8 @@ If you have any doubt, please open an issue!
 Currently, this tool is quite simple and all documentation can be found through the `--help` flag. Here is a quick summary:
 
 ```bash
-❯ code-djinn --help                                                                                                                                                                                                                                                                                                                                                                                                                                                                             (codedjinn_dev) 
-usage: code_djinn [-h] [-i] [-a [WISH]] [-t [WISH]] [-e] [-v] [--list-models] [-x [WISH]] [--clear-cache]
+❯ code-djinn --help 
+usage: code_djinn [-h] [-i] [-a [WISH]] [-t [WISH]] [-e] [-v] [--list-models] [-r [WISH]] [-x [WISH]] [--clear-cache]
 
 An AI CLI assistant
 
@@ -95,8 +95,10 @@ options:
   -e, --explain         Also provide an explanation for the command
   -v, --verbose         Verbose output from AI
   --list-models         List available models for all providers
+  -r [WISH], --run [WISH]
+                        Generate and directly run a shell command (checks for dangerous commands)
   -x [WISH], --execute [WISH]
-                        Generate and execute a shell command for the given wish
+                        Generate and execute a shell command with confirmation
   --clear-cache         Clear LLM client cache for troubleshooting
 ```
 # Bonus
