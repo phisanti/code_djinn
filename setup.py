@@ -16,7 +16,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "code_djinn=codedjinn.main:code_djinn",
+            "code-djinn=codedjinn.main:code_djinn",
         ],
     },
     python_requires=">=3.10",

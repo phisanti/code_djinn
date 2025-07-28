@@ -20,4 +20,4 @@ dependencies = [
 ]
 
 [project.scripts]
-code_djinn = "codedjinn.main:code_djinn"
+code-djinn = "codedjinn.main:code_djinn"

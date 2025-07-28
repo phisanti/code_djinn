@@ -1,0 +1,69 @@
+name: Test
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        make install-dev
+    
+    - name: Run tests with make
+      run: |
+        make test
+    
+    - name: Test CLI functionality
+      run: |
+        make test-import
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install flake8 black isort
+    
+    - name: Lint with make
+      run: |
+        make lint
+    
+    - name: Check code formatting (informational)
+      run: |
+        make check-format || echo "⚠️ Code formatting issues found (not blocking build)"
+      continue-on-error: true
+    
+    - name: Check import sorting (informational)
+      run: |
+        make check-imports || echo "⚠️ Import sorting issues found (not blocking build)"
+      continue-on-error: true

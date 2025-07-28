@@ -1,0 +1,45 @@
+name: Build Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'setup.py'
+      - 'pyproject.toml'
+      - 'codedjinn/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+      
+      - name: Build and verify package
+        run: |
+          make check-package
+          echo "📦 Build artifacts:"
+          ls -la dist/
+      
+      - name: Test installation from wheel
+        run: |
+          python -m pip install dist/*.whl
+          echo "✅ Package installed successfully"
+          
+      - name: Test package functionality
+        run: |
+          make test-import
+          echo "✅ All functionality tests passed"
