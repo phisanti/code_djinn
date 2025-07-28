@@ -120,90 +120,28 @@ def handle_test(wish: str, explain: bool):
 
 def handle_run(wish: str, explain: bool, verbose: bool):
     """Handle run command - direct execution with dangerous command checks."""
-    # Import only when needed
-    from .config import ConfigManager
-    from .core.djinn import Djinn
-    from .core.command_executor import CommandExecutor
-    from .utils import print_text
-    
-    try:
-        config_manager = ConfigManager()
-        config = config_manager.load_config()
-
-        # Validate configuration
-        is_valid, error_msg = config_manager.validate_config(config)
-        if not is_valid:
-            print_text(f"Error: {error_msg}", "red")
-            print_text(
-                "Please run 'code_djinn --init' to set up your configuration.", "red"
-            )
-            return
-
-        # Get the API key
-        provider = config["LLM_PROVIDER"].lower()
-        api_key_name = config_manager.get_api_key_name(provider)
-
-        # Init djinn to generate command
-        thedjinn = Djinn.from_config(config, config[api_key_name])
-
-        # Generate command first
-        command, description = thedjinn.ask(wish, explain, verbose)
-        
-        if not command:
-            print_text("No command was generated.", "red")
-            return
-
-        # Display the generated command
-        print()
-        print_text(f"Generated command: {command}", "blue")
-        if description and explain:
-            print_text(f"Description: {description}", "pink")
-
-        # Check if command is dangerous
-        executor = CommandExecutor(config["SHELL"], config.get("SHELL_PATH", ""))
-        is_dangerous = executor._is_dangerous_command(command)
-        
-        if is_dangerous:
-            print_text("⚠️  Potentially dangerous command detected, requiring confirmation...", "yellow")
-            # Fall back to ask-and-execute logic for dangerous commands
-            _, description, success, _, _ = thedjinn.ask_and_execute(wish, explain, verbose)
-            if verbose or description:
-                if success:
-                    print_text("\n✓ Command completed successfully", "green")
-                else:
-                    print_text("\n✗ Command execution failed", "red")
-        else:
-            # Safe command - execute directly
-            success, _, _ = executor.execute_with_confirmation(
-                command, description if explain else None, auto_confirm=True, verbose=verbose
-            )
-            if verbose or description:
-                if success:
-                    print_text("\n✓ Command completed successfully", "green")
-                else:
-                    print_text("\n✗ Command execution failed", "red")
-
-    except Exception as e:
-        print_text(f"Error: {e}", "red")
+    execution_mode = _create_execution_mode()
+    if execution_mode:
+        execution_mode.execute_safe_command(wish, explain, verbose)
 
 
 def handle_execute(wish: str, explain: bool, verbose: bool):
     """Handle execute command."""
-    # Import only when needed
-    execute_command(wish, explain, verbose)
+    execution_mode = _create_execution_mode()
+    if execution_mode:
+        execution_mode.execute_with_confirmation(wish, explain, verbose)
 
 
-def execute_command(wish: str, explain: bool = False, llm_verbose: bool = False):
+def _create_execution_mode():
     """
-    Generate and execute a command with user confirmation.
-
-    Args:
-        wish: The user's request or command to generate and execute
-        explain: Whether to include an explanation of the command
-        llm_verbose: Whether to show verbose LLM output
+    Factory function to create ExecutionMode instance with proper configuration.
+    
+    Returns:
+        ExecutionMode instance or None if configuration is invalid
     """
     from .config import ConfigManager
     from .core.djinn import Djinn
+    from .modes.execution_mode import ExecutionMode
     from .utils import print_text
     
     try:
@@ -217,31 +155,31 @@ def execute_command(wish: str, explain: bool = False, llm_verbose: bool = False)
             print_text(
                 "Please run 'code_djinn --init' to set up your configuration.", "red"
             )
-            return
+            return None
 
         # Get the API key
         provider = config["LLM_PROVIDER"].lower()
         api_key_name = config_manager.get_api_key_name(provider)
 
-        # Init djinn
-        thedjinn = Djinn.from_config(config, config[api_key_name])
-
-        # Generate and execute command
-        _, description, success, _, _ = thedjinn.ask_and_execute(
-            wish, explain, llm_verbose
+        # Create djinn and then ExecutionMode
+        djinn = Djinn.from_config(config, config[api_key_name])
+        llm = djinn._get_llm()
+        
+        # Create ExecutionMode directly
+        execution_mode = ExecutionMode(
+            llm, 
+            djinn.provider, 
+            djinn.os_fullname, 
+            djinn.shell, 
+            djinn.system_prompt_preferences, 
+            djinn.shell_path
         )
-
-        # Results are already displayed by the execution mode
-        # Just indicate final status if verbose or description exists
-        if llm_verbose or description:
-            if success:
-                print_text("\n✓ Command completed successfully", "green")
-            else:
-                print_text("\n✗ Command execution failed", "red")
+        
+        return execution_mode
 
     except Exception as e:
         print_text(f"Error: {e}", "red")
-        return
+        return None
 
 
 def code_djinn():

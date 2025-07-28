@@ -54,7 +54,7 @@ class CommandExecutor:
         # Safety check for dangerous commands
         is_dangerous = self._is_dangerous_command(command)
         if is_dangerous:
-            print_text("⚠️  WARNING: This command may be potentially dangerous!", "red")
+            print_text("⚠️  WARNING: This command may be potentially dangerous!\n", "red")
         
         # Get user confirmation
         if not auto_confirm:
