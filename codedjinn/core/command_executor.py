@@ -1,5 +1,4 @@
 import subprocess
-import shlex
 import shutil
 from typing import Optional, Tuple
 from ..utils import print_text
@@ -78,6 +77,17 @@ class CommandExecutor:
             print_text(error_msg, "red")
             return False, "", error_msg
     
+    SAFE_COMMANDS = [
+        'ls', 'dir', 'pwd', 'cd', 'echo', 'cat', 'less', 'more', 'head', 'tail',
+        'grep', 'find', 'locate', 'which', 'whereis', 'whoami', 'id', 'date', 'cal',
+        'uptime', 'w', 'who', 'ps', 'top', 'htop', 'df', 'du', 'free', 'uname',
+        'history', 'alias', 'type', 'file', 'stat', 'wc', 'sort', 'uniq', 'cut',
+        'tr', 'awk', 'sed', 'diff', 'cmp', 'tree', 'exa', 'lsd', 'bat', 'fzf',
+        'rg', 'ag', 'fd', 'jq', 'yq', 'git status', 'git log', 'git diff', 'git show',
+        'npm list', 'pip list', 'cargo --version', 'python --version', 'node --version',
+        'lolcat', 'cowsay', 'figlet', 'neofetch', 'screenfetch', 'fortune'
+    ]
+    
     def _is_dangerous_command(self, command: str) -> bool:
         """
         Check if a command is potentially dangerous.
@@ -90,19 +100,54 @@ class CommandExecutor:
         """
         command_lower = command.lower().strip()
         
+        # First check for explicitly dangerous commands
         for dangerous_cmd in self.DANGEROUS_COMMANDS:
             if command_lower.startswith(dangerous_cmd.lower()) or f" {dangerous_cmd.lower()}" in command_lower:
                 return True
         
         # Check for other dangerous patterns
         dangerous_patterns = [
-            '>', '>>', '|', '&&', '||', ';', '$(', '`',
-            'curl', 'wget', 'python -c', 'eval', 'exec'
+            '$(', '`', 'curl', 'wget', 'python -c', 'eval', 'exec'
         ]
         
         for pattern in dangerous_patterns:
             if pattern in command_lower:
                 return True
+        
+        # Check for file redirection (dangerous)
+        if '>' in command_lower or '>>' in command_lower:
+            return True
+        
+        # Check for command chaining (dangerous)
+        if '&&' in command_lower or '||' in command_lower or ';' in command_lower:
+            return True
+        
+        # Check for piping to shell interpreters (dangerous)
+        pipe_to_shell_patterns = ['| sh', '|sh', '| bash', '|bash', '| zsh', '|zsh', '| fish', '|fish']
+        for pattern in pipe_to_shell_patterns:
+            if pattern in command_lower:
+                return True
+        
+        # Check for pipe to potentially dangerous commands
+        if '|' in command_lower:
+            # Allow simple pipes to common safe commands
+            safe_pipe_targets = [
+                'grep', 'awk', 'sed', 'sort', 'uniq', 'head', 'tail', 'cat', 'less', 'more',
+                'lolcat', 'cowsay', 'fzf', 'bat', 'exa', 'lsd', 'tree', 'jq', 'yq',
+                'wc', 'tr', 'cut', 'column', 'tee', 'xargs', 'find', 'locate',
+                'rg', 'ag', 'fd', 'ripgrep', 'the_silver_searcher'
+            ]
+            pipe_parts = command_lower.split('|')
+            if len(pipe_parts) > 1:
+                for part in pipe_parts[1:]:  # Check everything after the first pipe
+                    part = part.strip()
+                    if not any(part.startswith(safe_cmd) for safe_cmd in safe_pipe_targets):
+                        return True
+        
+        # Finally, check if it's a known safe command (only if no dangerous patterns found)
+        for safe_cmd in self.SAFE_COMMANDS:
+            if command_lower.startswith(safe_cmd.lower()):
+                return False
                 
         return False
     

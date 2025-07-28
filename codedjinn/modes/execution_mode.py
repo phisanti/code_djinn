@@ -67,24 +67,3 @@ class ExecutionMode(QuestionMode):
             
         except Exception as e:
             raise RuntimeError(f"Error in execution mode: {str(e)}")
-    
-    def execute_command_directly(
-        self, 
-        command: str, 
-        description: Optional[str] = None,
-        auto_confirm: bool = False,
-        verbose: bool = False
-    ) -> Tuple[bool, str, str]:
-        """
-        Execute a command directly without generating it first.
-        
-        Args:
-            command: The command to execute
-            description: Optional description of the command
-            auto_confirm: Skip execution confirmation
-            verbose: Whether to show verbose status messages
-            
-        Returns:
-            Tuple of (success, stdout, stderr)
-        """
-        return self.executor.execute_with_confirmation(command, description, auto_confirm, verbose)
