@@ -26,31 +26,11 @@ jobs:
           version_number="${version#v}" # Removes 'v' prefix if it exists
           echo "VERSION=${version_number}" >> $GITHUB_ENV
 
-      # 3. Wait for PyPI availability and download the source tarball
-      - name: Wait for PyPI availability
-        run: |
-          echo "Waiting for package to be available on PyPI..."
-          max_attempts=30
-          attempt=1
-          while [ $attempt -le $max_attempts ]; do
-            if curl -s -f "https://files.pythonhosted.org/packages/source/c/code-djinn/code-djinn-${{ env.VERSION }}.tar.gz" > /dev/null; then
-              echo "Package found on PyPI after $attempt attempts"
-              break
-            fi
-            echo "Attempt $attempt/$max_attempts: Package not yet available, waiting 30 seconds..."
-            sleep 30
-            attempt=$((attempt + 1))
-          done
-          
-          if [ $attempt -gt $max_attempts ]; then
-            echo "Package not available on PyPI after $max_attempts attempts"
-            exit 1
-          fi
-
-      - name: Download PyPI tarball
+      # 3. Download GitHub release tarball
+      - name: Download GitHub release tarball
         run: |
           curl -sL \
-            "https://files.pythonhosted.org/packages/source/c/code-djinn/code-djinn-${{ env.VERSION }}.tar.gz" \
+            "https://github.com/phisanti/code_djinn/archive/refs/tags/v${{ env.VERSION }}.tar.gz" \
             -o code-djinn-${{ env.VERSION }}.tar.gz
 
       # 4. Compute its SHA256 checksum
@@ -78,7 +58,7 @@ jobs:
 
             desc "AI-powered coding assistant that generates shell commands"
             homepage "https://github.com/phisanti/code_djinn"
-            url "https://files.pythonhosted.org/packages/source/c/code-djinn/code-djinn-${{ env.VERSION }}.tar.gz"
+            url "https://github.com/phisanti/code_djinn/archive/refs/tags/v${{ env.VERSION }}.tar.gz"
             sha256 "${{ env.SHA256 }}"
             license "MIT"
 
