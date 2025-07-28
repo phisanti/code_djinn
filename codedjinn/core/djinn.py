@@ -19,6 +19,7 @@ class Djinn:
         provider: Optional[str] = "deepinfra",
         model: Optional[str] = "mistralai/Mistral-7B-Instruct-v0.1",
         api_key: Optional[str] = None,
+        system_prompt_preferences: Optional[str] = None,
     ):
         """
         Initialize Djinn with minimal overhead.
@@ -29,6 +30,7 @@ class Djinn:
             provider: LLM provider
             model: Model name
             api_key: API key
+            system_prompt_preferences: Additional user preferences for prompts
         """
         # Auto-detect system info if not provided (cached in utils)
         if os_fullname is None or shell is None:
@@ -42,6 +44,7 @@ class Djinn:
         self.provider = provider.lower()
         self.model = model
         self.api_key = api_key
+        self.system_prompt_preferences = system_prompt_preferences or ""
         
         # Lazy-initialized components
         self._llm = None
@@ -86,7 +89,7 @@ class Djinn:
             param_manager.apply_parameters(llm, self.provider, explain)
             
             # Build prompt (fast - no langchain)
-            prompt_builder = build_command_prompt(self.os_fullname, self.shell, explain)
+            prompt_builder = build_command_prompt(self.os_fullname, self.shell, explain, self.system_prompt_preferences)
             prompt_text = prompt_builder.format(wish=wish)
             
             if llm_verbose:
@@ -121,7 +124,7 @@ class Djinn:
         Returns:
             The formatted prompt string
         """
-        prompt_builder = build_command_prompt(self.os_fullname, self.shell, explain)
+        prompt_builder = build_command_prompt(self.os_fullname, self.shell, explain, self.system_prompt_preferences)
         return prompt_builder.format(wish=wish)
     
     def _invoke_llm(self, llm, prompt_text: str) -> str:
@@ -166,7 +169,7 @@ class Djinn:
         
         # Create execution mode with cached LLM
         llm = self._get_llm()
-        execution_mode = ExecutionMode(llm, self.provider, self.os_fullname, self.shell)
+        execution_mode = ExecutionMode(llm, self.provider, self.os_fullname, self.shell, self.system_prompt_preferences)
         
         return execution_mode.ask_and_execute(wish, explain, llm_verbose, auto_confirm)
     
@@ -188,4 +191,5 @@ class Djinn:
             provider=config["LLM_PROVIDER"],
             model=config["LLM_MODEL"],
             api_key=api_key,
+            system_prompt_preferences=config.get("SYSTEM_PROMPT_PREFERENCES", ""),
         )

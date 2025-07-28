@@ -1,5 +1,6 @@
 import subprocess
 import shlex
+import shutil
 from typing import Optional, Tuple
 from ..utils import print_text
 
@@ -120,13 +121,8 @@ class CommandExecutor:
         print()  # Empty line for better readability
         
         try:
-            # Execute command with output directly to user's terminal
-            # This allows real-time output and proper terminal interaction
-            result = subprocess.run(
-                command,
-                shell=True,
-                timeout=30  # 30 second timeout
-            )
+            # Execute command with proper shell support for aliases
+            result = self._run_with_shell_support(command)
             
             success = result.returncode == 0
             
@@ -152,3 +148,45 @@ class CommandExecutor:
             error_msg = f"Execution error: {str(e)}"
             print_text(error_msg, "red")
             return False, "", error_msg
+
+    def _run_with_shell_support(self, command: str) -> subprocess.CompletedProcess:
+        """
+        Execute command with proper shell support including aliases.
+        
+        Args:
+            command: The command to execute
+            
+        Returns:
+            CompletedProcess result
+        """
+        if self.shell == "fish":
+            # Find fish shell path dynamically
+            fish_path = shutil.which("fish")
+            if fish_path:
+                return subprocess.run(
+                    [fish_path, "-i", "-c", command],
+                    timeout=30
+                )
+        elif self.shell == "zsh":
+            # Find zsh shell path dynamically
+            zsh_path = shutil.which("zsh")
+            if zsh_path:
+                return subprocess.run(
+                    [zsh_path, "-i", "-c", command],
+                    timeout=30
+                )
+        elif self.shell == "bash":
+            # Find bash shell path dynamically
+            bash_path = shutil.which("bash")
+            if bash_path:
+                return subprocess.run(
+                    [bash_path, "-i", "-c", command],
+                    timeout=30
+                )
+        
+        # Fallback to generic shell execution if shell not found or not supported
+        return subprocess.run(
+            command,
+            shell=True,
+            timeout=30
+        )

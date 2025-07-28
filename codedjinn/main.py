@@ -268,6 +268,12 @@ def init():
     api_key_name = config_manager.get_api_key_name(provider_choice)
     api_key = input(f"What is your {provider_choice} API key? ")
 
+    # Get system prompt preferences
+    print_text("\nSystem Prompt Preferences (optional):", "green")
+    print_text("Enter any additional instructions you'd like to include in prompts", "yellow")
+    print_text("Example: 'Use colorful command-line tools like lsd, bat, etc. when available'", "yellow")
+    system_prompt_prefs = input("System prompt preferences (press Enter to skip): ").strip()
+
     # Save config
     config = {
         "OS": os_family,
@@ -275,6 +281,7 @@ def init():
         "SHELL": shell,
         "LLM_PROVIDER": provider_choice,
         "LLM_MODEL": model_choice,
+        "SYSTEM_PROMPT_PREFERENCES": system_prompt_prefs,
         api_key_name: api_key,
     }
 
