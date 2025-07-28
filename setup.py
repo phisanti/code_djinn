@@ -1,4 +1,12 @@
 from setuptools import setup, find_packages
+from pathlib import Path
+
+# Read README with proper encoding handling
+readme_path = Path(__file__).parent / "README.md"
+try:
+    long_description = readme_path.read_text(encoding="utf-8")
+except FileNotFoundError:
+    long_description = "High-performance CLI assistant for generating shell commands using LLM models"
 
 setup(
     name="codedjinn",
@@ -20,6 +28,6 @@ setup(
         ],
     },
     python_requires=">=3.10",
-    long_description=open("README.md").read(),
+    long_description=long_description,
     long_description_content_type="text/markdown",
 )
