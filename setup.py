@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="codedjinn",
-    version="0.2.0",
+    version="0.2.1",
     description="High-performance CLI assistant for generating shell commands using LLM models",
     author="phisanti",
     author_email="tisalon@outlook.com",
