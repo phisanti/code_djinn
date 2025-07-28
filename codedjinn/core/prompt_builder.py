@@ -54,7 +54,7 @@ class PromptBuilder:
         return self.template
 
 
-def build_command_prompt(os_fullname: str, shell: str, explain: bool = False) -> PromptBuilder:
+def build_command_prompt(os_fullname: str, shell: str, explain: bool = False, system_prompt_preferences: str = "") -> PromptBuilder:
     """
     Build a prompt for CLI command generation using the lightweight prompt builder.
     
@@ -62,11 +62,25 @@ def build_command_prompt(os_fullname: str, shell: str, explain: bool = False) ->
         os_fullname: The operating system name
         shell: The shell being used
         explain: Boolean indicating whether to include an explanation
+        system_prompt_preferences: Additional user preferences for command generation
         
     Returns:
         PromptBuilder instance configured for command generation
     """
-    # XML-structured prompt (same as original but using Template format)
+    # Build system preferences section
+    system_prefs_section = ""
+    if system_prompt_preferences.strip():
+        system_prefs_section = f"""
+    <user_preferences>
+    {system_prompt_preferences.strip()}
+    </user_preferences>"""
+
+    # Build guidelines with conditional preferences line
+    preferences_guideline = ""
+    if system_prompt_preferences.strip():
+        preferences_guideline = "\n    - Follow the user preferences specified above when possible"
+
+    # XML-structured prompt
     template = f"""You are a CLI command expert. Generate a command that accomplishes the user's request.
 
     <context>
@@ -74,14 +88,14 @@ def build_command_prompt(os_fullname: str, shell: str, explain: bool = False) ->
     <shell>{shell}</shell>
     <request>$wish</request>
     <explain>{"yes" if explain else "no"}</explain>
-    </context>
+    </context>{system_prefs_section}
 
     <guidelines>
     - Provide a single, concise command that works on the specified OS and shell
     - Use common utilities and avoid complex scripts when possible
     - Prioritize safety (avoid destructive commands without warnings)
     - Use standard flags and options
-    - Do not include explanatory text in the command itself
+    - Do not include explanatory text in the command itself{preferences_guideline}
     </guidelines>
 
     <examples>

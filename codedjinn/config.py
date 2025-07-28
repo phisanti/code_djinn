@@ -105,6 +105,7 @@ class ConfigManager:
                 "SHELL": config.get("SHELL", ""),
                 "LLM_PROVIDER": config.get("LLM_PROVIDER", ""),
                 "LLM_MODEL": config.get("LLM_MODEL", ""),
+                "SYSTEM_PROMPT_PREFERENCES": config.get("SYSTEM_PROMPT_PREFERENCES", ""),
             }
 
             # Add API keys section

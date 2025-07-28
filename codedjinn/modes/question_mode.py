@@ -11,7 +11,7 @@ class QuestionMode:
     Generates commands without executing them.
     """
     
-    def __init__(self, llm_instance, provider: str, os_fullname: str, shell: str):
+    def __init__(self, llm_instance, provider: str, os_fullname: str, shell: str, system_prompt_preferences: str = ""):
         """
         Initialize question mode.
         
@@ -20,11 +20,13 @@ class QuestionMode:
             provider: The LLM provider name
             os_fullname: Operating system name
             shell: Shell type
+            system_prompt_preferences: Additional user preferences for prompts
         """
         self.llm = llm_instance
         self.provider = provider
         self.os_fullname = os_fullname
         self.shell = shell
+        self.system_prompt_preferences = system_prompt_preferences
         self.parameter_manager = ParameterManager()
     
     def ask(
@@ -52,7 +54,7 @@ class QuestionMode:
             self.parameter_manager.apply_parameters(self.llm, self.provider, explain)
             
             # Build prompt
-            prompt_builder = build_command_prompt(self.os_fullname, self.shell, explain)
+            prompt_builder = build_command_prompt(self.os_fullname, self.shell, explain, self.system_prompt_preferences)
             prompt_text = prompt_builder.format(wish=wish)
             
             if llm_verbose:
@@ -87,7 +89,7 @@ class QuestionMode:
         Returns:
             The formatted prompt string
         """
-        prompt_builder = build_command_prompt(self.os_fullname, self.shell, explain)
+        prompt_builder = build_command_prompt(self.os_fullname, self.shell, explain, self.system_prompt_preferences)
         return prompt_builder.format(wish=wish)
     
     def _invoke_llm(self, inputs: dict, prompt_builder) -> str:
