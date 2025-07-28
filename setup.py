@@ -9,7 +9,7 @@ except FileNotFoundError:
     long_description = "High-performance CLI assistant for generating shell commands using LLM models"
 
 setup(
-    name="codedjinn",
+    name="code_djinn",
     version="0.2.1",
     description="High-performance CLI assistant for generating shell commands using LLM models",
     author="phisanti",
