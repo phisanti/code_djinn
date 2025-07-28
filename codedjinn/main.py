@@ -223,7 +223,7 @@ def init():
     Initialize the configuration to get the variables os_family, shell and api_key
     """
     from .config import ConfigManager
-    from .utils import get_os_info, print_text
+    from .utils import get_os_info, print_text, get_shell_path
     from .llmfactory import LLMFactory
     import os
     
@@ -252,6 +252,12 @@ def init():
             shell = "fish"
         else:
             shell = input("What shell are you using? (default: bash) ") or "bash"
+    
+    # Detect shell path once during configuration
+    shell_path = get_shell_path(shell)
+    if not shell_path:
+        print_text(f"Warning: Could not find {shell} executable in PATH. Command execution may fall back to default shell.", "yellow")
+        shell_path = ""
 
     # Get LLM provider and model
     factory = LLMFactory()
@@ -269,9 +275,9 @@ def init():
     api_key = input(f"What is your {provider_choice} API key? ")
 
     # Get system prompt preferences
-    print_text("\nSystem Prompt Preferences (optional):", "green")
-    print_text("Enter any additional instructions you'd like to include in prompts", "yellow")
-    print_text("Example: 'Use colorful command-line tools like lsd, bat, etc. when available'", "yellow")
+    print_text("\nSystem Prompt Preferences (optional):\n", "green")
+    print_text("Enter any additional instructions you'd like to include in prompts\n", "yellow")
+    print_text("Example: 'Use colorful command-line tools like lsd, bat, etc. when available'\n", "yellow")
     system_prompt_prefs = input("System prompt preferences (press Enter to skip): ").strip()
 
     # Save config
@@ -279,6 +285,7 @@ def init():
         "OS": os_family,
         "OS_FULLNAME": os_fullname,
         "SHELL": shell,
+        "SHELL_PATH": shell_path,
         "LLM_PROVIDER": provider_choice,
         "LLM_MODEL": model_choice,
         "SYSTEM_PROMPT_PREFERENCES": system_prompt_prefs,

@@ -20,6 +20,7 @@ class Djinn:
         model: Optional[str] = "mistralai/Mistral-7B-Instruct-v0.1",
         api_key: Optional[str] = None,
         system_prompt_preferences: Optional[str] = None,
+        shell_path: Optional[str] = None,
     ):
         """
         Initialize Djinn with minimal overhead.
@@ -31,6 +32,7 @@ class Djinn:
             model: Model name
             api_key: API key
             system_prompt_preferences: Additional user preferences for prompts
+            shell_path: Full path to shell executable
         """
         # Auto-detect system info if not provided (cached in utils)
         if os_fullname is None or shell is None:
@@ -45,6 +47,7 @@ class Djinn:
         self.model = model
         self.api_key = api_key
         self.system_prompt_preferences = system_prompt_preferences or ""
+        self.shell_path = shell_path or ""
         
         # Lazy-initialized components
         self._llm = None
@@ -169,7 +172,7 @@ class Djinn:
         
         # Create execution mode with cached LLM
         llm = self._get_llm()
-        execution_mode = ExecutionMode(llm, self.provider, self.os_fullname, self.shell, self.system_prompt_preferences)
+        execution_mode = ExecutionMode(llm, self.provider, self.os_fullname, self.shell, self.system_prompt_preferences, self.shell_path)
         
         return execution_mode.ask_and_execute(wish, explain, llm_verbose, auto_confirm)
     
@@ -192,4 +195,5 @@ class Djinn:
             model=config["LLM_MODEL"],
             api_key=api_key,
             system_prompt_preferences=config.get("SYSTEM_PROMPT_PREFERENCES", ""),
+            shell_path=config.get("SHELL_PATH", ""),
         )

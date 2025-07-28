@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional, TextIO, Tuple
 import platform
+import shutil
 
 
 def get_os_info() -> Tuple[Optional[str], Optional[str]]:
@@ -98,3 +99,16 @@ def print_text(
     print(text_to_print, end=end, file=file)
     if file:
         file.flush()
+
+
+def get_shell_path(shell_name: str) -> Optional[str]:
+    """
+    Get the full path for a given shell.
+    
+    Args:
+        shell_name: Name of the shell (e.g., 'fish', 'zsh', 'bash')
+        
+    Returns:
+        Full path to the shell executable, or None if not found
+    """
+    return shutil.which(shell_name)

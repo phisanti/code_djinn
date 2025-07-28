@@ -16,14 +16,16 @@ class CommandExecutor:
         'kill', 'killall', 'pkill', 'chmod +x', 'sudo'
     ]
     
-    def __init__(self, shell: str = "bash"):
+    def __init__(self, shell: str = "bash", shell_path: str = ""):
         """
         Initialize the command executor.
         
         Args:
             shell: The shell to use for command execution
+            shell_path: The full path to the shell executable
         """
         self.shell = shell
+        self.shell_path = shell_path
     
     def execute_with_confirmation(
         self, 
@@ -152,6 +154,7 @@ class CommandExecutor:
     def _run_with_shell_support(self, command: str) -> subprocess.CompletedProcess:
         """
         Execute command with proper shell support including aliases.
+        Uses the pre-configured shell path for optimal performance.
         
         Args:
             command: The command to execute
@@ -159,8 +162,15 @@ class CommandExecutor:
         Returns:
             CompletedProcess result
         """
-        if self.shell == "fish":
-            # Find fish shell path dynamically
+        # Use stored shell path if available and shell is supported
+        if self.shell_path and self.shell in ["fish", "zsh", "bash"]:
+            return subprocess.run(
+                [self.shell_path, "-i", "-c", command],
+                timeout=30
+            )
+        
+        # Fallback to dynamic detection if shell path not stored (backward compatibility)
+        elif self.shell == "fish":
             fish_path = shutil.which("fish")
             if fish_path:
                 return subprocess.run(
@@ -168,7 +178,6 @@ class CommandExecutor:
                     timeout=30
                 )
         elif self.shell == "zsh":
-            # Find zsh shell path dynamically
             zsh_path = shutil.which("zsh")
             if zsh_path:
                 return subprocess.run(
@@ -176,7 +185,6 @@ class CommandExecutor:
                     timeout=30
                 )
         elif self.shell == "bash":
-            # Find bash shell path dynamically
             bash_path = shutil.which("bash")
             if bash_path:
                 return subprocess.run(
@@ -184,7 +192,7 @@ class CommandExecutor:
                     timeout=30
                 )
         
-        # Fallback to generic shell execution if shell not found or not supported
+        # Ultimate fallback to generic shell execution
         return subprocess.run(
             command,
             shell=True,

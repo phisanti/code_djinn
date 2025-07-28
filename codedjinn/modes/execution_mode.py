@@ -10,7 +10,7 @@ class ExecutionMode(QuestionMode):
     Inherits from QuestionMode to reuse command generation logic.
     """
     
-    def __init__(self, llm_instance, provider: str, os_fullname: str, shell: str, system_prompt_preferences: str = ""):
+    def __init__(self, llm_instance, provider: str, os_fullname: str, shell: str, system_prompt_preferences: str = "", shell_path: str = ""):
         """
         Initialize execution mode.
         
@@ -20,9 +20,10 @@ class ExecutionMode(QuestionMode):
             os_fullname: Operating system name
             shell: Shell type
             system_prompt_preferences: Additional user preferences for prompts
+            shell_path: Full path to the shell executable
         """
         super().__init__(llm_instance, provider, os_fullname, shell, system_prompt_preferences)
-        self.executor = CommandExecutor(shell)
+        self.executor = CommandExecutor(shell, shell_path)
     
     def ask_and_execute(
         self, 
