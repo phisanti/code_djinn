@@ -1,8 +1,9 @@
 # code_djinn - Your Coding Genie
 
-[![Test](https://github.com/phisanti/code_djinn/workflows/Test/badge.svg)](https://github.com/phisanti/code_djinn/actions/workflows/test.yml)
-[![PyPI version](https://badge.fury.io/py/codedjinn.svg)](https://badge.fury.io/py/codedjinn)
-[![Python versions](https://img.shields.io/pypi/pyversions/codedjinn.svg)](https://pypi.org/project/codedjinn/)
+[![Test](https://github.com/phisanti/code_djinn/actions/workflows/test.yml/badge.svg)](https://github.com/phisanti/code_djinn/actions/workflows/test.yml)
+[![Upload Python Package](https://github.com/phisanti/code_djinn/actions/workflows/publish-to-pypi.yml/badge.svg)](https://github.com/phisanti/code_djinn/actions/workflows/publish-to-pypi.yml)
+[![PyPI version](https://badge.fury.io/py/codedjinn.svg)](https://pypi.org/project/code_djinn/)
+[![Python versions](https://img.shields.io/pypi/pyversions/codedjinn.svg)](https://pypi.org/project/code_djinn/)
 [![Development Status](https://img.shields.io/badge/Development%20Status-4%20--%20Beta-yellow.svg)](https://pypi.org/search/?c=Development+Status+%3A%3A+4+-+Beta)
 
 Code Djinn is a lightning-fast CLI assistant that generates shell. Code Djinn leverages fast and efficient LLM models like QwQ (Qween), Codestral (Mistral), and Gemini flash (Google) to provide quick responses to your coding queries. The focus on lightweight models ensures snappy performance and responsiveness, making it a practical tool for your daily coding tasks.
