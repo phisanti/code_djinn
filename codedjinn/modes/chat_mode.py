@@ -136,8 +136,8 @@ class ChatMode(BaseMode):
                 print_text("Command cancelled", "yellow")
                 return
         else:
-            response = input("Execute? [Y/n]: ").strip().lower()
-            if response not in ['', 'y', 'yes']:
+            response = input("Execute? (enter to confirm or type n/no to cancel): ").strip().lower()
+            if response in ['n', 'no']:
                 print_text("Command cancelled", "yellow")
                 return
         
