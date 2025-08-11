@@ -10,7 +10,7 @@ except FileNotFoundError:
 
 setup(
     name="code_djinn",
-    version="0.2.2",
+    version="0.2.3",
     description="High-performance CLI assistant for generating shell commands using LLM models",
     author="phisanti",
     author_email="tisalon@outlook.com",
