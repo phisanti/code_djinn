@@ -90,7 +90,6 @@ code_djinn --chat                      # Start interactive chat session
 # Utilities
 code_djinn --init                      # Setup configuration
 code_djinn --list-models              # Show available LLM models
-code_djinn -t "your request"          # Test prompt generation
 code_djinn --clear-cache              # Clear performance cache
 ```
 
@@ -145,8 +144,6 @@ An AI CLI assistant
 options:
   -h, --help            show this help message and exit
   -i, --init            Initialize the configuration
-  -t [WISH], --test [WISH]
-                        Test the prompt for the given wish
   -e, --explain         Also provide an explanation for the command
   -v, --verbose         Verbose output from AI
   --list-models         List available models for all providers
@@ -157,15 +154,6 @@ options:
   --chat [SESSION_ID]   Start interactive chat mode (optionally resume session)
 ```
 
-## What's New in v0.2.3
-
-- 🎉 **Interactive Chat Mode**: Conversational interface with context awareness
-- 🔧 **Unified Commands**: Simplified `-r/--run` with optional `--no-confirm` flag  
-- ⚡ **Performance**: 99%+ startup time improvement with intelligent caching
-- 🛡️ **Enhanced Security**: Better dangerous command detection (including `find -exec` support)
-- 🎨 **Better UX**: Clearer confirmation prompts and streamlined interactions
-- 🏗️ **Architecture**: Cleaner codebase with unified prompt builders and better error handling
-
 ## Troubleshooting
 
 If you encounter issues:
@@ -173,7 +161,6 @@ If you encounter issues:
 1. **Clear the cache**: `code_djinn --clear-cache`
 2. **Reinitialize configuration**: `code_djinn --init`
 3. **Check your API key**: Ensure it's valid and has proper permissions
-4. **Test prompt generation**: `code_djinn -t "test command"`
 
 For more help, [open an issue](https://github.com/phisanti/code_djinn/issues) on GitHub!
 

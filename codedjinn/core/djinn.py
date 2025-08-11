@@ -68,21 +68,6 @@ class Djinn:
             self._parameter_manager = ParameterManager()
         return self._parameter_manager
 
-    def test_prompt(self, wish: str, explain: bool = False) -> str:
-        """
-        Build and return the formatted prompt for testing.
-
-        Args:
-            wish: The command the user wants to generate
-            explain: Whether to include an explanation
-
-        Returns:
-            The formatted prompt string
-        """
-        prompt_builder = build_command_prompt(
-            self.os_fullname, self.shell, explain, self.system_prompt_preferences
-        )
-        return prompt_builder.format(wish=wish)
 
     def _invoke_llm(self, llm, prompt_text: str) -> str:
         """

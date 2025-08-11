@@ -14,7 +14,6 @@ def code_djinn():
         handle_clear_cache,
         handle_list_models,
         handle_init,
-        handle_test,
         handle_run,
         handle_chat,
     )
@@ -29,9 +28,6 @@ def code_djinn():
         handle_list_models()
     elif args.init:
         handle_init()
-    elif args.test is not None:
-        wish = args.test or input("What do you want to do? ")
-        handle_test(wish, args.explain)
     elif args.run is not None:
         wish = args.run or input("What do you want to do? ")
         handle_run(wish, args.explain, args.verbose, args.no_confirm)

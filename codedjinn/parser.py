@@ -17,15 +17,6 @@ def create_parser() -> argparse.ArgumentParser:
         "-i", "--init", action="store_true", help="Initialize the configuration"
     )
     parser.add_argument(
-        "-t",
-        "--test",
-        metavar="WISH",
-        type=str,
-        nargs="?",
-        const="",
-        help="Test the prompt for the given wish",
-    )
-    parser.add_argument(
         "-e",
         "--explain",
         action="store_true",

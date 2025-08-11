@@ -45,36 +45,6 @@ def handle_init():
     init()
 
 
-def handle_test(wish: str, explain: bool):
-    """Handle test command."""
-    from .config import ConfigManager
-    from .core.djinn import Djinn
-    from .utils import print_text
-
-    try:
-        config_manager = ConfigManager()
-        config = config_manager.load_config()
-
-        is_valid, error_msg = config_manager.validate_config(config)
-        if not is_valid:
-            print_text(f"Error: {error_msg}", "red")
-            print_text(
-                "Please run 'code_djinn --init' to set up your configuration.", "red"
-            )
-            return
-
-        provider = config["LLM_PROVIDER"].lower()
-        api_key_name = config_manager.get_api_key_name(provider)
-
-        djinn = Djinn.from_config(config, config[api_key_name])
-        prompt = djinn.test_prompt(wish, explain)
-
-        if prompt:
-            print()
-            print_text(prompt, "blue")
-
-    except Exception as e:
-        print_text(f"Error: {e}", "red")
 
 
 def handle_run(wish: str, explain: bool, verbose: bool, no_confirm: bool = False):
