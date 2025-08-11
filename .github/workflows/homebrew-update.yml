@@ -1,0 +1,113 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to update (e.g., 0.2.3)'
+        required: false
+        default: ''
+
+jobs:
+  update-homebrew-formula:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout main repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Extract version
+      id: version
+      run: |
+        if [ -n "${{ github.event.inputs.version }}" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        elif [ "${{ github.event_name }}" = "release" ]; then
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+        else
+          VERSION=$(grep 'version =' pyproject.toml | sed 's/.*version = "\([^"]*\)".*/\1/')
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version to update: $VERSION"
+        
+    - name: Get package SHA256
+      id: sha256
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        TARBALL_URL="https://files.pythonhosted.org/packages/source/c/code-djinn/code_djinn-${VERSION}.tar.gz"
+        
+        # Wait a bit for PyPI to propagate
+        echo "Waiting for PyPI to propagate the package..."
+        sleep 30
+        
+        # Try to get SHA256, with retries
+        for i in {1..5}; do
+          if SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | cut -d' ' -f1); then
+            echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+            echo "Package SHA256: $SHA256"
+            break
+          else
+            echo "Attempt $i failed, retrying in 30 seconds..."
+            sleep 30
+          fi
+        done
+        
+        if [ -z "$SHA256" ]; then
+          echo "Failed to get SHA256 after 5 attempts"
+          exit 1
+        fi
+        
+    - name: Checkout Homebrew tap repository
+      uses: actions/checkout@v4
+      with:
+        repository: phisanti/homebrew-code-djinn
+        token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        path: homebrew-tap
+        
+    - name: Update formula
+      run: |
+        cd homebrew-tap
+        VERSION="${{ steps.version.outputs.version }}"
+        SHA256="${{ steps.sha256.outputs.sha256 }}"
+        
+        # Update the formula
+        sed -i "s/code_djinn-[0-9]\+\.[0-9]\+\.[0-9]\+\.tar\.gz/code_djinn-${VERSION}.tar.gz/g" Formula/code-djinn.rb
+        sed -i "s/sha256 \"[a-f0-9]\{64\}\"/sha256 \"${SHA256}\"/g" Formula/code-djinn.rb
+        
+        # Verify the changes
+        echo "=== Updated Formula ==="
+        cat Formula/code-djinn.rb
+        
+    - name: Commit and push changes
+      run: |
+        cd homebrew-tap
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        git add Formula/code-djinn.rb
+        git commit -m "Update code-djinn to version ${VERSION}"
+        git push
+        
+    - name: Create Pull Request (fallback)
+      if: failure()
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        path: homebrew-tap
+        commit-message: Update code-djinn to version ${{ steps.version.outputs.version }}
+        title: Update code-djinn to version ${{ steps.version.outputs.version }}
+        body: |
+          Automated update of code-djinn formula to version ${{ steps.version.outputs.version }}
+          
+          - Updated package URL and SHA256
+          - This PR was created because direct push failed
+        branch: update-version-${{ steps.version.outputs.version }}

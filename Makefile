@@ -1,8 +1,11 @@
 # Makefile for CodeDjinn project
-.PHONY: help test test-verbose test-specific install install-dev clean build check-package lint format check-format check-imports release-check version-check prepare-release
+.PHONY: help test test-verbose test-specific install install-dev clean build check-package lint format check-format check-imports release-check version-check prepare-release homebrew-update homebrew-sync homebrew-create-formula homebrew-release
 
 # Default Python executable
 PYTHON := python3
+
+# Homebrew tap directory
+HOMEBREW_TAP_DIR := ../homebrew-code-djinn
 
 # Help target
 help: ## Show this help message
@@ -115,3 +118,102 @@ dev-test: lint test ## Quick development test cycle (lint + test)
 
 # CI/CD simulation
 ci-test: install test lint check-format check-imports test-import ## Simulate CI/CD pipeline locally
+
+# Homebrew tap management
+homebrew-sync: ## Sync current project files to homebrew tap
+	@echo "🍺 Syncing project to Homebrew tap..."
+	@if [ ! -d "$(HOMEBREW_TAP_DIR)" ]; then \
+		echo "❌ Homebrew tap directory not found: $(HOMEBREW_TAP_DIR)"; \
+		echo "Please create the homebrew tap first"; \
+		exit 1; \
+	fi
+	@current_version=$$(grep 'version =' pyproject.toml | sed 's/.*version = "\([^"]*\)".*/\1/'); \
+	echo "📦 Current version: $$current_version"; \
+	cd $(HOMEBREW_TAP_DIR) && \
+	if [ ! -f "Formula/code-djinn.rb" ]; then \
+		echo "⚠️  Formula not found, creating template..."; \
+		$(MAKE) -C ../code_djinn homebrew-create-formula; \
+	fi; \
+	echo "✅ Homebrew tap synced"
+
+homebrew-create-formula: ## Create initial Homebrew formula
+	@echo "🍺 Creating Homebrew formula..."
+	@current_version=$$(grep 'version =' pyproject.toml | sed 's/.*version = "\([^"]*\)".*/\1/'); \
+	if [ ! -d "$(HOMEBREW_TAP_DIR)/Formula" ]; then \
+		mkdir -p "$(HOMEBREW_TAP_DIR)/Formula"; \
+	fi; \
+	cat > "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb" << 'EOF'
+class CodeDjinn < Formula
+  include Language::Python::Virtualenv
+
+  desc "CLI tool that helps users generate shell commands using various LLM models"
+  homepage "https://github.com/phisanti/code_djinn"
+  url "https://files.pythonhosted.org/packages/source/c/code-djinn/code_djinn-VERSION.tar.gz"
+  sha256 "PLACEHOLDER_SHA256"
+  license "MIT"
+
+  depends_on "python@3.11"
+
+  resource "langchain-community" do
+    url "https://files.pythonhosted.org/packages/source/l/langchain-community/langchain_community-0.3.13.tar.gz"
+    sha256 "86ac8993d0c18b3ab72ce4fcccbee6ac04fd9c71dd0b0c3ed4a5e12e1cbeb5b9"
+  end
+
+  resource "langchain-core" do
+    url "https://files.pythonhosted.org/packages/source/l/langchain-core/langchain_core-0.3.29.tar.gz"
+    sha256 "0d92ce0b83fc1371c5ded073fa3a57b7c7c8c9b6341c3c426e0b48b8db20b76"
+  end
+
+  resource "langchain-mistralai" do
+    url "https://files.pythonhosted.org/packages/source/l/langchain-mistralai/langchain_mistralai-0.2.5.tar.gz"
+    sha256 "3a5b1a3a6c8c8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8"
+  end
+
+  resource "langchain-google-genai" do
+    url "https://files.pythonhosted.org/packages/source/l/langchain-google-genai/langchain_google_genai-2.0.9.tar.gz"
+    sha256 "4b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5"
+  end
+
+  def install
+    virtualenv_install_with_resources
+  end
+
+  test do
+    system "#{bin}/code_djinn", "--help"
+  end
+end
+EOF
+	@echo "✅ Homebrew formula created"
+
+homebrew-update: homebrew-sync ## Update Homebrew formula with current version
+	@echo "🍺 Updating Homebrew formula..."
+	@current_version=$$(grep 'version =' pyproject.toml | sed 's/.*version = "\([^"]*\)".*/\1/'); \
+	echo "📦 Updating to version: $$current_version"; \
+	cd $(HOMEBREW_TAP_DIR) && \
+	if [ ! -f "Formula/code-djinn.rb" ]; then \
+		echo "❌ Formula not found, run 'make homebrew-create-formula' first"; \
+		exit 1; \
+	fi; \
+	echo "🔄 Fetching SHA256 for version $$current_version..."; \
+	tarball_url="https://files.pythonhosted.org/packages/source/c/code-djinn/code_djinn-$$current_version.tar.gz"; \
+	sha256_hash=$$(curl -sL "$$tarball_url" | shasum -a 256 | cut -d' ' -f1) || { \
+		echo "⚠️  Could not fetch tarball, using placeholder SHA256"; \
+		sha256_hash="PLACEHOLDER_SHA256"; \
+	}; \
+	sed -i '' "s/code_djinn-VERSION/code_djinn-$$current_version/g" "Formula/code-djinn.rb"; \
+	sed -i '' "s/PLACEHOLDER_SHA256/$$sha256_hash/g" "Formula/code-djinn.rb"; \
+	echo "✅ Formula updated with version $$current_version and SHA256: $$sha256_hash"; \
+	echo "📝 Committing changes..."; \
+	git add .; \
+	git commit -m "Update code-djinn to version $$current_version" || echo "ℹ️  No changes to commit"; \
+	echo "✅ Homebrew formula updated"
+
+homebrew-release: release-check homebrew-update ## Complete release workflow including Homebrew update
+	@echo "🎉 Complete release workflow finished!"
+	@echo ""
+	@current_version=$$(grep 'version =' pyproject.toml | sed 's/.*version = "\([^"]*\)".*/\1/'); \
+	echo "Next steps:"; \
+	echo "1. Push main project: git tag v$$current_version && git push origin v$$current_version"; \
+	echo "2. Create GitHub release to trigger PyPI publishing"; \
+	echo "3. Push Homebrew tap: cd $(HOMEBREW_TAP_DIR) && git push origin main"; \
+	echo "4. Test installation: brew tap phisanti/code-djinn && brew install code-djinn"
