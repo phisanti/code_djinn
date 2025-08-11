@@ -1,23 +1,18 @@
-import pickle
 import hashlib
-import os
-from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from ..llmfactory import LLMFactory
 
 
 class LLMCache:
     """
-    High-performance LLM client cache that persists clients to disk
-    and maintains in-memory cache for near-zero startup time.
+    High-performance memory-only LLM client cache for fast access within the same session.
+    On process restart, clients are re-instantiated via LLMFactory for security and stability.
     """
     
     _memory_cache: Dict[str, Any] = {}
     
     def __init__(self):
-        """Initialize the LLM cache with disk storage."""
-        self.cache_dir = Path.home() / ".cache" / "codedjinn" / "llm_clients"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        """Initialize the memory-only LLM cache."""
         self.factory = None  # Lazy initialize
     
     def _get_cache_key(self, provider: str, model: str) -> str:
@@ -25,13 +20,9 @@ class LLMCache:
         key_string = f"{provider}:{model}"
         return hashlib.md5(key_string.encode()).hexdigest()
     
-    def _get_cache_path(self, cache_key: str) -> Path:
-        """Get the file path for a cached client."""
-        return self.cache_dir / f"{cache_key}.pkl"
-    
     def get_llm(self, provider: str, model: str, api_key: str) -> Any:
         """
-        Get an LLM client, using cache when possible.
+        Get an LLM client, using memory cache when possible.
         
         Args:
             provider: LLM provider name
@@ -50,34 +41,14 @@ class LLMCache:
             self._update_api_key(llm, provider, api_key)
             return llm
         
-        # Check disk cache (fast)
-        cache_path = self._get_cache_path(cache_key)
-        if cache_path.exists():
-            try:
-                with open(cache_path, 'rb') as f:
-                    llm = pickle.load(f)
-                    # Update API key and store in memory cache
-                    self._update_api_key(llm, provider, api_key)
-                    self._memory_cache[cache_key] = llm
-                    return llm
-            except Exception:
-                # Cache file corrupted, remove it
-                cache_path.unlink(missing_ok=True)
-        
-        # Create new client (slow - only happens first time)
+        # Create new client (only happens first time per session)
         if self.factory is None:
             self.factory = LLMFactory()
             
         llm = self.factory.create_llm(provider, model, api_key)
         
-        # Cache both in memory and disk
+        # Cache in memory only
         self._memory_cache[cache_key] = llm
-        try:
-            with open(cache_path, 'wb') as f:
-                pickle.dump(llm, f)
-        except Exception:
-            # Disk caching failed, but memory cache still works
-            pass
             
         return llm
     
@@ -98,11 +69,8 @@ class LLMCache:
             pass
     
     def clear_cache(self) -> None:
-        """Clear both memory and disk caches."""
+        """Clear the memory cache."""
         self._memory_cache.clear()
-        
-        for cache_file in self.cache_dir.glob("*.pkl"):
-            cache_file.unlink(missing_ok=True)
     
     @classmethod
     def get_memory_cache_size(cls) -> int:

@@ -73,7 +73,10 @@ class ConfigManager:
         # Fall back to .env if available
         if self.env_path.exists():
             try:
-                self._config_cache = dotenv_values(self.env_path)
+                env_values = dotenv_values(self.env_path)
+                # Normalize .env keys to uppercase for consistency
+                config_dict = {key.upper(): value for key, value in env_values.items()}
+                self._config_cache = config_dict
                 return self._config_cache
             except Exception as e:
                 print_text(f"Error loading config from {self.env_path}: {e}", "red")

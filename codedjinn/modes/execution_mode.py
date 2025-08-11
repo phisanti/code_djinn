@@ -1,13 +1,13 @@
 from typing import Optional, Tuple
-from .question_mode import QuestionMode
+from .base_mode import BaseMode
 from ..core.command_executor import CommandExecutor
 from ..utils import print_text
 
 
-class ExecutionMode(QuestionMode):
+class ExecutionMode(BaseMode):
     """
     Handles execution mode - generates commands and executes them with confirmation.
-    Inherits from QuestionMode to reuse command generation logic.
+    Inherits from BaseMode to reuse command generation logic.
     """
     
     def __init__(self, llm_instance, provider: str, os_fullname: str, shell: str, system_prompt_preferences: str = "", shell_path: str = ""):
@@ -127,8 +127,10 @@ class ExecutionMode(QuestionMode):
             
             if is_dangerous:
                 print_text("\n⚠️  Potentially dangerous command detected, requiring confirmation...", "yellow")
-                # Use full confirmation flow for dangerous commands
-                _, description, success, _, _ = self.ask_and_execute(wish, explain, verbose)
+                # Execute the already generated command with confirmation (no double LLM call)
+                success, _, _ = self.executor.execute_with_confirmation(
+                    command, description if explain else None, auto_confirm=False, verbose=verbose
+                )
                 if verbose or description:
                     if success:
                         print_text("\n✓ Command completed successfully", "green")

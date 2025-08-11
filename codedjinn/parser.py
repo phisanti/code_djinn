@@ -17,15 +17,6 @@ def create_parser() -> argparse.ArgumentParser:
         "-i", "--init", action="store_true", help="Initialize the configuration"
     )
     parser.add_argument(
-        "-a",
-        "--ask",
-        metavar="WISH",
-        type=str,
-        nargs="?",
-        const="",
-        help="Get a shell command for the given wish",
-    )
-    parser.add_argument(
         "-t",
         "--test",
         metavar="WISH",
@@ -60,21 +51,26 @@ def create_parser() -> argparse.ArgumentParser:
         type=str,
         nargs="?",
         const="",
-        help="Generate and directly run a shell command (checks for dangerous commands)",
+        help="Generate and run a shell command (with confirmation by default)",
     )
     parser.add_argument(
-        "-x",
-        "--execute",
-        metavar="WISH",
-        type=str,
-        nargs="?",
-        const="",
-        help="Generate and execute a shell command with confirmation",
+        "--no-confirm",
+        action="store_true",
+        default=False,
+        help="Skip confirmation for safe commands when using --run",
     )
     parser.add_argument(
         "--clear-cache",
         action="store_true",
         help="Clear LLM client cache for troubleshooting",
+    )
+    parser.add_argument(
+        "--chat",
+        metavar="SESSION_ID",
+        type=str,
+        nargs="?",
+        const="",
+        help="Start interactive chat mode (optionally resume session)",
     )
     return parser
 

@@ -3,7 +3,7 @@ from .llm_cache import get_cached_llm
 from .prompt_builder import build_command_prompt
 from .response_parser import ResponseParser
 from ..providers.parameter_manager import ParameterManager
-from ..utils import get_os_info, print_text
+from ..utils import get_os_info, get_current_shell, print_text
 
 
 class Djinn:
@@ -17,7 +17,7 @@ class Djinn:
         os_fullname: Optional[str] = None,
         shell: Optional[str] = None,
         provider: Optional[str] = "deepinfra",
-        model: Optional[str] = "mistralai/Mistral-7B-Instruct-v0.1",
+        model: Optional[str] = "Qwen/QwQ-32B",
         api_key: Optional[str] = None,
         system_prompt_preferences: Optional[str] = None,
         shell_path: Optional[str] = None,
@@ -35,10 +35,12 @@ class Djinn:
             shell_path: Full path to shell executable
         """
         # Auto-detect system info if not provided (cached in utils)
-        if os_fullname is None or shell is None:
-            detected_os, detected_shell = get_os_info()
-            os_fullname = os_fullname or detected_os
-            shell = shell or detected_shell
+        if os_fullname is None:
+            detected_os, _ = get_os_info()
+            os_fullname = detected_os
+        
+        if shell is None:
+            shell = get_current_shell()
         
         # Store minimal config - defer expensive operations
         self.os_fullname = os_fullname
@@ -65,56 +67,6 @@ class Djinn:
         if self._parameter_manager is None:
             self._parameter_manager = ParameterManager()
         return self._parameter_manager
-    
-    def ask(
-        self, 
-        wish: str, 
-        explain: bool = False, 
-        llm_verbose: bool = False
-    ) -> Tuple[str, Optional[str]]:
-        """
-        Generate a command using cached LLM for maximum speed.
-        
-        Args:
-            wish: The command the user wants to generate
-            explain: Whether to include an explanation
-            llm_verbose: Whether to show verbose LLM output
-            
-        Returns:
-            Tuple of (command, description)
-        """
-        try:
-            # Get cached LLM (fast after first call)
-            llm = self._get_llm()
-            
-            # Apply provider-specific parameters
-            param_manager = self._get_parameter_manager()
-            param_manager.apply_parameters(llm, self.provider, explain)
-            
-            # Build prompt (fast - no langchain)
-            prompt_builder = build_command_prompt(self.os_fullname, self.shell, explain, self.system_prompt_preferences)
-            prompt_text = prompt_builder.format(wish=wish)
-            
-            if llm_verbose:
-                print_text("\nSending prompt to LLM:", "yellow")
-                print_text(prompt_text, "blue")
-            
-            # Make LLM request
-            response = self._invoke_llm(llm, prompt_text)
-            
-            # Extract content from response
-            if hasattr(response, "content"):
-                response_text = response.content
-            else:
-                response_text = str(response)
-            
-            # Parse response (fast)
-            command, description = ResponseParser.parse_command_response(response_text)
-            
-            return command, description
-            
-        except Exception as e:
-            raise RuntimeError(f"Error generating command: {str(e)}")
     
     def test_prompt(self, wish: str, explain: bool = False) -> str:
         """
@@ -175,6 +127,26 @@ class Djinn:
         execution_mode = ExecutionMode(llm, self.provider, self.os_fullname, self.shell, self.system_prompt_preferences, self.shell_path)
         
         return execution_mode.ask_and_execute(wish, explain, llm_verbose, auto_confirm)
+    
+    def start_chat(self, session_id: Optional[str] = None) -> None:
+        """
+        Start interactive chat mode with session support.
+        
+        Args:
+            session_id: Optional session ID for resuming conversations
+        """
+        from ..modes.chat_mode import ChatMode
+        
+        # Use cached LLM for maximum speed  
+        llm = self._get_llm()
+        
+        chat_mode = ChatMode(
+            llm, self.provider, self.os_fullname, self.shell,
+            self.system_prompt_preferences, self.shell_path
+        )
+        
+        # Start the chat session
+        chat_mode.start_chat_session()
     
     @classmethod
     def from_config(cls, config: dict, api_key: str):

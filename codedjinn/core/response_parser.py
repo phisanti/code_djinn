@@ -80,3 +80,47 @@ class ResponseParser:
                 description = element.replace("Description:", "").replace("description:", "").strip()
         
         return command, description
+    
+    @staticmethod
+    def parse_chat_response(response_text: str) -> dict:
+        """
+        Parse chat response that may contain questions, commands, or both.
+        
+        Expected XML format:
+        <answer>conversational response</answer>
+        <command>shell_command</command>
+        <description>what the command does</description>
+        
+        Args:
+            response_text: Raw response text from the LLM
+            
+        Returns:
+            dict with keys: 'type', 'answer', 'command', 'description'
+        """
+        result = {
+            'type': 'answer',  # Default to conversational
+            'answer': None,
+            'command': None, 
+            'description': None
+        }
+        
+        # Parse XML tags using existing regex patterns
+        answer_match = re.search(r"<answer>(.*?)</answer>", response_text, DOTALL)
+        command_match = re.search(r"<command>(.*?)</command>", response_text, DOTALL)
+        description_match = re.search(r"<description>(.*?)</description>", response_text, DOTALL)
+        
+        if answer_match:
+            result['answer'] = answer_match.group(1).strip()
+        
+        if command_match:
+            result['command'] = command_match.group(1).strip()
+            result['type'] = 'command' if not answer_match else 'both'
+            
+            if description_match:
+                result['description'] = description_match.group(1).strip()
+        
+        # Fallback for non-XML responses
+        if not answer_match and not command_match:
+            result['answer'] = response_text.strip()
+        
+        return result

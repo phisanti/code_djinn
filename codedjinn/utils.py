@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, TextIO, Tuple
 import platform
 import shutil
+import os
 
 
 def get_os_info() -> Tuple[Optional[str], Optional[str]]:
@@ -99,6 +100,21 @@ def print_text(
     print(text_to_print, end=end, file=file)
     if file:
         file.flush()
+
+
+def get_current_shell() -> Optional[str]:
+    """
+    Detect the current shell from environment variables.
+    
+    Returns:
+        Shell name (e.g., 'fish', 'zsh', 'bash') or None if not detected
+    """
+    shell_path = os.environ.get('SHELL', '')
+    if shell_path:
+        # Extract shell name from path (e.g., '/usr/local/bin/fish' -> 'fish')
+        shell_name = os.path.basename(shell_path)
+        return shell_name
+    return None
 
 
 def get_shell_path(shell_name: str) -> Optional[str]:

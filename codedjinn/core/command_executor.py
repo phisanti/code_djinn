@@ -1,5 +1,6 @@
 import subprocess
 import shutil
+import re
 from typing import Optional, Tuple
 from ..utils import print_text
 
@@ -31,7 +32,8 @@ class CommandExecutor:
         command: str, 
         description: Optional[str] = None,
         auto_confirm: bool = False,
-        verbose: bool = False
+        verbose: bool = False,
+        quiet: bool = False
     ) -> Tuple[bool, str, str]:
         """
         Execute a command after user confirmation.
@@ -41,23 +43,28 @@ class CommandExecutor:
             description: Optional description of what the command does
             auto_confirm: Skip confirmation (for testing)
             verbose: Whether to show success/status messages
+            quiet: Skip all prompts and prefaces (for chat mode)
             
         Returns:
             Tuple of (success, stdout, stderr)
         """
-        # Simple confirmation prompt matching intended UX
-        print(f"\nDo you want to run the command: {command}?")
+        # Skip preface in quiet mode (for chat mode integration)
+        if not quiet:
+            # Simple confirmation prompt matching intended UX
+            print(f"\nDo you want to run the command: {command}?")
+            
+            if description:
+                print_text(f"Description: {description}", "pink")
+            
+            # Safety check for dangerous commands
+            is_dangerous = self._is_dangerous_command(command)
+            if is_dangerous:
+                print_text("⚠️  WARNING: This command may be potentially dangerous!\n", "red")
         
-        if description:
-            print_text(f"Description: {description}", "pink")
-        
-        # Safety check for dangerous commands
-        is_dangerous = self._is_dangerous_command(command)
-        if is_dangerous:
-            print_text("⚠️  WARNING: This command may be potentially dangerous!\n", "red")
-        
-        # Get user confirmation
-        if not auto_confirm:
+        # Get user confirmation (quiet mode skips this completely)
+        if not auto_confirm and not quiet:
+            # Check if dangerous when not in quiet mode
+            is_dangerous = self._is_dangerous_command(command)
             if is_dangerous:
                 response = input("Type 'YES' to confirm: ").strip()
                 if response != "YES":
@@ -107,12 +114,31 @@ class CommandExecutor:
         
         # Check for other dangerous patterns
         dangerous_patterns = [
-            '$(', '`', 'curl', 'wget', 'python -c', 'eval', 'exec'
+            '$(', '`', 'curl', 'wget', 'python -c', 'eval'
         ]
         
         for pattern in dangerous_patterns:
             if pattern in command_lower:
                 return True
+                
+        # Special handling for 'exec' - check if it's standalone, not part of find -exec
+        if re.search(r'\bexec\b', command_lower):
+            # Allow find -exec patterns with safe commands
+            if re.search(r'\bfind\b.*-exec\s+', command_lower):
+                # Extract what comes after -exec
+                exec_match = re.search(r'-exec\s+([^;{}]+)', command_lower)
+                if exec_match:
+                    exec_command = exec_match.group(1).strip()
+                    # Check if the command after -exec is safe
+                    safe_exec_commands = ['ls', 'echo', 'cat', 'head', 'tail', 'grep', 'wc', 'file', 'stat', 'basename', 'dirname']
+                    if any(exec_command.startswith(safe_cmd) for safe_cmd in safe_exec_commands):
+                        pass  # Allow this find -exec
+                    else:
+                        return True  # Dangerous find -exec
+                else:
+                    return True  # Malformed find -exec
+            else:
+                return True  # Standalone exec command
         
         # Check for file redirection (dangerous)
         if '>' in command_lower or '>>' in command_lower:

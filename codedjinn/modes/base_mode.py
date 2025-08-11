@@ -5,15 +5,15 @@ from ..providers.parameter_manager import ParameterManager
 from ..utils import print_text
 
 
-class QuestionMode:
+class BaseMode:
     """
-    Handles question-answering mode (current functionality).
-    Generates commands without executing them.
+    Base class for all Code Djinn modes.
+    Provides common functionality for command generation.
     """
     
     def __init__(self, llm_instance, provider: str, os_fullname: str, shell: str, system_prompt_preferences: str = ""):
         """
-        Initialize question mode.
+        Initialize base mode.
         
         Args:
             llm_instance: The LLM instance to use
