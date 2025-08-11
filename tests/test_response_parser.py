@@ -21,11 +21,14 @@ class TestResponseParser(unittest.TestCase):
         <description>Lists all files in the current directory with detailed information</description>
         </response>
         """
-        
+
         command, description = ResponseParser.parse_command_response(xml_response)
-        
+
         self.assertEqual(command, "ls -la")
-        self.assertEqual(description, "Lists all files in the current directory with detailed information")
+        self.assertEqual(
+            description,
+            "Lists all files in the current directory with detailed information",
+        )
 
     def test_parse_xml_response_command_only(self):
         """Test parsing XML response with command only (no description)."""
@@ -34,9 +37,9 @@ class TestResponseParser(unittest.TestCase):
         <command>pwd</command>
         </response>
         """
-        
+
         command, description = ResponseParser.parse_command_response(xml_response)
-        
+
         self.assertEqual(command, "pwd")
         self.assertIsNone(description)
 
@@ -50,9 +53,9 @@ class TestResponseParser(unittest.TestCase):
         <description>Find Python files, exclude cache, show first 10</description>
         </response>
         """
-        
+
         command, description = ResponseParser.parse_command_response(xml_response)
-        
+
         expected_command = 'find . -name "*.py" \\\n        | grep -v __pycache__ \\\n        | head -10'
         self.assertEqual(command, expected_command)
         self.assertEqual(description, "Find Python files, exclude cache, show first 10")
@@ -65,9 +68,9 @@ class TestResponseParser(unittest.TestCase):
         <description>   Show the status of the git repository   </description>
         </response>
         """
-        
+
         command, description = ResponseParser.parse_command_response(xml_response)
-        
+
         # Should strip whitespace
         self.assertEqual(command, "git status")
         self.assertEqual(description, "Show the status of the git repository")
@@ -79,9 +82,9 @@ class TestResponseParser(unittest.TestCase):
         Command: docker ps -a
         Description: Show all Docker containers
         """
-        
+
         command, description = ResponseParser.parse_command_response(fallback_response)
-        
+
         self.assertEqual(command, "docker ps -a")
         self.assertEqual(description, "Show all Docker containers")
 
@@ -91,9 +94,9 @@ class TestResponseParser(unittest.TestCase):
         command: grep -r "pattern" .
         DESCRIPTION: Search for pattern in all files
         """
-        
+
         command, description = ResponseParser.parse_command_response(fallback_response)
-        
+
         self.assertEqual(command, 'grep -r "pattern" .')
         # The fallback parser doesn't strip the "DESCRIPTION:" prefix in uppercase
         self.assertEqual(description, "DESCRIPTION: Search for pattern in all files")
@@ -104,9 +107,9 @@ class TestResponseParser(unittest.TestCase):
         The command you need is:
         Command: uname -a
         """
-        
+
         command, description = ResponseParser.parse_command_response(fallback_response)
-        
+
         self.assertEqual(command, "uname -a")
         self.assertIsNone(description)
 
@@ -116,10 +119,10 @@ class TestResponseParser(unittest.TestCase):
         This will show system information.
         Description: Display system information
         """
-        
+
         with self.assertRaises(ValueError) as context:
             ResponseParser.parse_command_response(fallback_response)
-        
+
         self.assertIn("Failed to extract command", str(context.exception))
 
     def test_parse_xml_response_malformed(self):
@@ -130,7 +133,7 @@ class TestResponseParser(unittest.TestCase):
         <description>List files</description>
         </response>
         """
-        
+
         # Should fail XML parsing and fall back to line-by-line
         # Since there's no "Command:" or "command:" line, it should fail entirely
         with self.assertRaises(ValueError):
@@ -148,16 +151,18 @@ class TestResponseParser(unittest.TestCase):
         
         This command will create a gzipped tar file.
         """
-        
+
         command, description = ResponseParser.parse_command_response(mixed_response)
-        
+
         self.assertEqual(command, "tar -czf backup.tar.gz /home/user/documents")
-        self.assertEqual(description, "Create a compressed tar archive of the documents folder")
+        self.assertEqual(
+            description, "Create a compressed tar archive of the documents folder"
+        )
 
     def test_parse_response_empty_input(self):
         """Test parsing empty or whitespace-only input."""
         empty_inputs = ["", "   ", "\n\n\n", "\t\t"]
-        
+
         for empty_input in empty_inputs:
             with self.assertRaises(ValueError):
                 ResponseParser.parse_command_response(empty_input)
@@ -169,10 +174,10 @@ class TestResponseParser(unittest.TestCase):
         This is just explanatory text with no actual command.
         Please try a different approach.
         """
-        
+
         with self.assertRaises(ValueError) as context:
             ResponseParser.parse_command_response(no_command_response)
-        
+
         self.assertIn("Failed to extract command", str(context.exception))
 
     def test_parse_xml_response_empty_command_tag(self):
@@ -183,7 +188,7 @@ class TestResponseParser(unittest.TestCase):
         <description>This has no actual command</description>
         </response>
         """
-        
+
         with self.assertRaises(ValueError):
             ResponseParser.parse_command_response(xml_with_empty_command)
 
@@ -195,7 +200,7 @@ class TestResponseParser(unittest.TestCase):
         <description>Command is just whitespace</description>
         </response>
         """
-        
+
         with self.assertRaises(ValueError):
             ResponseParser.parse_command_response(xml_with_whitespace_command)
 
@@ -207,9 +212,9 @@ class TestResponseParser(unittest.TestCase):
         <description>Print hello world</description>
         </response>
         """
-        
+
         command, description = ResponseParser._parse_xml_response(xml_response)
-        
+
         self.assertEqual(command, 'echo "hello world"')
         self.assertEqual(description, "Print hello world")
 
@@ -219,9 +224,11 @@ class TestResponseParser(unittest.TestCase):
         command: python --version
         description: Show Python version
         """
-        
-        command, description = ResponseParser._parse_fallback_response(fallback_response)
-        
+
+        command, description = ResponseParser._parse_fallback_response(
+            fallback_response
+        )
+
         self.assertEqual(command, "python --version")
         self.assertEqual(description, "Show Python version")
 
@@ -233,11 +240,14 @@ class TestResponseParser(unittest.TestCase):
         <description>Find lines starting with capital letter and ending with punctuation</description>
         </response>
         """
-        
+
         command, description = ResponseParser.parse_command_response(xml_response)
-        
+
         self.assertEqual(command, 'grep -E "^[A-Z].*[!?.]$" file.txt')
-        self.assertEqual(description, "Find lines starting with capital letter and ending with punctuation")
+        self.assertEqual(
+            description,
+            "Find lines starting with capital letter and ending with punctuation",
+        )
 
 
 if __name__ == "__main__":

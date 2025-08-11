@@ -105,11 +105,11 @@ def print_text(
 def get_current_shell() -> Optional[str]:
     """
     Detect the current shell from environment variables.
-    
+
     Returns:
         Shell name (e.g., 'fish', 'zsh', 'bash') or None if not detected
     """
-    shell_path = os.environ.get('SHELL', '')
+    shell_path = os.environ.get("SHELL", "")
     if shell_path:
         # Extract shell name from path (e.g., '/usr/local/bin/fish' -> 'fish')
         shell_name = os.path.basename(shell_path)
@@ -120,10 +120,10 @@ def get_current_shell() -> Optional[str]:
 def get_shell_path(shell_name: str) -> Optional[str]:
     """
     Get the full path for a given shell.
-    
+
     Args:
         shell_name: Name of the shell (e.g., 'fish', 'zsh', 'bash')
-        
+
     Returns:
         Full path to the shell executable, or None if not found
     """

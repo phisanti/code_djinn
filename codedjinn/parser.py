@@ -86,7 +86,7 @@ def get_user_selection(items: List[Any], prompt: str) -> Optional[Any]:
         The selected item from the list, or None if selection fails
     """
     from .utils import print_text
-    
+
     items_list = " | ".join([f"{i + 1}. {item}" for i, item in enumerate(items)])
     print_text(items_list, "blue")
 

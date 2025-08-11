@@ -6,7 +6,9 @@ readme_path = Path(__file__).parent / "README.md"
 try:
     long_description = readme_path.read_text(encoding="utf-8")
 except FileNotFoundError:
-    long_description = "High-performance CLI assistant for generating shell commands using LLM models"
+    long_description = (
+        "High-performance CLI assistant for generating shell commands using LLM models"
+    )
 
 setup(
     name="code_djinn",

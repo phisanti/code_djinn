@@ -11,13 +11,17 @@ def code_djinn():
     """
     from .parser import create_parser
     from .commands import (
-        handle_clear_cache, handle_list_models, handle_init,
-        handle_test, handle_run, handle_chat
+        handle_clear_cache,
+        handle_list_models,
+        handle_init,
+        handle_test,
+        handle_run,
+        handle_chat,
     )
-    
+
     parser = create_parser()
     args = parser.parse_args()
-    
+
     # Handle commands in order of likelihood and performance impact
     if args.clear_cache:
         handle_clear_cache()
