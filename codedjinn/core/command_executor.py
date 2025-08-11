@@ -233,37 +233,14 @@ class CommandExecutor:
         Returns:
             CompletedProcess result
         """
-        # Use stored shell path if available and shell is supported
+        # Use shell path with interactive mode for alias/function support
         if self.shell_path and self.shell in ["fish", "zsh", "bash"]:
             return subprocess.run(
                 [self.shell_path, "-i", "-c", command],
                 timeout=30
             )
         
-        # Fallback to dynamic detection if shell path not stored (backward compatibility)
-        elif self.shell == "fish":
-            fish_path = shutil.which("fish")
-            if fish_path:
-                return subprocess.run(
-                    [fish_path, "-i", "-c", command],
-                    timeout=30
-                )
-        elif self.shell == "zsh":
-            zsh_path = shutil.which("zsh")
-            if zsh_path:
-                return subprocess.run(
-                    [zsh_path, "-i", "-c", command],
-                    timeout=30
-                )
-        elif self.shell == "bash":
-            bash_path = shutil.which("bash")
-            if bash_path:
-                return subprocess.run(
-                    [bash_path, "-i", "-c", command],
-                    timeout=30
-                )
-        
-        # Ultimate fallback to generic shell execution
+        # Fallback to generic shell execution if no shell path available
         return subprocess.run(
             command,
             shell=True,
