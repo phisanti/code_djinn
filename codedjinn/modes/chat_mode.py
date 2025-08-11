@@ -3,6 +3,7 @@ from .base_mode import BaseMode
 from ..core.command_executor import CommandExecutor
 from ..core.response_parser import ResponseParser
 from ..core.prompt_builder import build_chat_prompt
+from ..core.input_prompt import ChatPrompt
 from ..utils import print_text
 import os
 import time
@@ -33,6 +34,8 @@ class ChatMode(BaseMode):
         self.chat_prompt_builder = build_chat_prompt(
             os_fullname, shell, system_prompt_preferences
         )
+        # Initialize enhanced input handler
+        self.chat_prompt = ChatPrompt()
 
     def start_chat_session(self):
         """Main chat loop - enhanced UX with directory context."""
@@ -43,7 +46,7 @@ class ChatMode(BaseMode):
             try:
                 # Enhanced prompt showing current directory
                 current_dir = os.path.basename(os.getcwd())
-                user_input = input(f"\n[{current_dir}]> ").strip()
+                user_input = self.chat_prompt.get_input(f"\n[{current_dir}]> ")
 
                 if user_input.lower() == "exit":
                     break
@@ -147,17 +150,13 @@ class ChatMode(BaseMode):
 
         if is_dangerous:
             print_text("⚠️  Potentially dangerous command", "yellow")
-            response = input("Type 'YES' to execute or Enter to cancel: ").strip()
+            response = self.chat_prompt.get_confirmation("Type 'YES' to execute or Enter to cancel: ", dangerous=True)
             if response != "YES":
                 print_text("Command cancelled", "yellow")
                 return
         else:
-            response = (
-                input("Execute? (enter to confirm or type n/no to cancel): ")
-                .strip()
-                .lower()
-            )
-            if response in ["n", "no"]:
+            response = self.chat_prompt.get_confirmation("Execute? (enter to confirm or type n/no to cancel): ")
+            if response.lower() in ["n", "no"]:
                 print_text("Command cancelled", "yellow")
                 return
 
