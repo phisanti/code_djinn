@@ -1,8 +1,9 @@
 # Makefile for CodeDjinn project
 .PHONY: help test test-verbose test-specific install install-dev clean build check-package lint format check-format check-imports release-check version-check prepare-release homebrew-update homebrew-sync homebrew-create-formula homebrew-release
 
-# Default Python executable
-PYTHON := python3
+# Default Python executable - prefer conda environment
+CONDA_ENV_PYTHON := /Users/santiago/miniconda3/envs/codedjinn_dev/bin/python
+PYTHON := $(shell if [ -x "$(CONDA_ENV_PYTHON)" ]; then echo "$(CONDA_ENV_PYTHON)"; else which python3 2>/dev/null || echo python3; fi)
 
 # Homebrew tap directory
 HOMEBREW_TAP_DIR := ../homebrew-code-djinn
@@ -142,47 +143,25 @@ homebrew-create-formula: ## Create initial Homebrew formula
 	if [ ! -d "$(HOMEBREW_TAP_DIR)/Formula" ]; then \
 		mkdir -p "$(HOMEBREW_TAP_DIR)/Formula"; \
 	fi; \
-	cat > "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb" << 'EOF'
-class CodeDjinn < Formula
-  include Language::Python::Virtualenv
-
-  desc "CLI tool that helps users generate shell commands using various LLM models"
-  homepage "https://github.com/phisanti/code_djinn"
-  url "https://files.pythonhosted.org/packages/source/c/code-djinn/code_djinn-VERSION.tar.gz"
-  sha256 "PLACEHOLDER_SHA256"
-  license "MIT"
-
-  depends_on "python@3.11"
-
-  resource "langchain-community" do
-    url "https://files.pythonhosted.org/packages/source/l/langchain-community/langchain_community-0.3.13.tar.gz"
-    sha256 "86ac8993d0c18b3ab72ce4fcccbee6ac04fd9c71dd0b0c3ed4a5e12e1cbeb5b9"
-  end
-
-  resource "langchain-core" do
-    url "https://files.pythonhosted.org/packages/source/l/langchain-core/langchain_core-0.3.29.tar.gz"
-    sha256 "0d92ce0b83fc1371c5ded073fa3a57b7c7c8c9b6341c3c426e0b48b8db20b76"
-  end
-
-  resource "langchain-mistralai" do
-    url "https://files.pythonhosted.org/packages/source/l/langchain-mistralai/langchain_mistralai-0.2.5.tar.gz"
-    sha256 "3a5b1a3a6c8c8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8"
-  end
-
-  resource "langchain-google-genai" do
-    url "https://files.pythonhosted.org/packages/source/l/langchain-google-genai/langchain_google_genai-2.0.9.tar.gz"
-    sha256 "4b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5"
-  end
-
-  def install
-    virtualenv_install_with_resources
-  end
-
-  test do
-    system "#{bin}/code_djinn", "--help"
-  end
-end
-EOF
+	echo 'class CodeDjinn < Formula' > "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '  include Language::Python::Virtualenv' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '  desc "CLI tool that helps users generate shell commands using various LLM models"' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '  homepage "https://github.com/phisanti/code_djinn"' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '  url "https://files.pythonhosted.org/packages/source/c/code-djinn/code_djinn-VERSION.tar.gz"' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '  sha256 "PLACEHOLDER_SHA256"' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '  license "MIT"' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '  depends_on "python@3.11"' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '  def install' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '    virtualenv_install_with_resources' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '  end' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '  test do' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '    system "#{bin}/code_djinn", "--help"' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo '  end' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"; \
+	echo 'end' >> "$(HOMEBREW_TAP_DIR)/Formula/code-djinn.rb"
 	@echo "✅ Homebrew formula created"
 
 homebrew-update: homebrew-sync ## Update Homebrew formula with current version
