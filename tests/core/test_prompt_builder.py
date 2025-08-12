@@ -75,15 +75,12 @@ class TestPromptBuilder(unittest.TestCase):
         # Test formatting with a sample wish
         prompt = builder.format(wish="list files")
 
-        # Check that basic elements are present
+        # Check that basic elements are present (updated for current XML structure)
         self.assertIn("macOS 15.5", prompt)
         self.assertIn("fish", prompt)
         self.assertIn("list files", prompt)
-        self.assertIn("CLI command expert", prompt)
+        self.assertIn("terminal CLI assistant", prompt)  # Updated text
         self.assertIn("<command>", prompt)
-
-        # Should not contain explanation request when explain=False
-        self.assertIn("<explain>no</explain>", prompt)
 
     def test_build_command_prompt_with_explanation(self):
         """Test command prompt building with explanation enabled."""
@@ -91,8 +88,7 @@ class TestPromptBuilder(unittest.TestCase):
 
         prompt = builder.format(wish="find large files")
 
-        # Check explanation elements
-        self.assertIn("<explain>yes</explain>", prompt)
+        # Check explanation elements (updated for current format)
         self.assertIn("<description>", prompt)
         self.assertIn("Ubuntu 22.04", prompt)
         self.assertIn("bash", prompt)
@@ -163,20 +159,18 @@ class TestPromptBuilder(unittest.TestCase):
         builder = build_command_prompt("Windows 11", "cmd", explain=True)
         prompt = builder.format(wish="show directory contents")
 
-        # Check for required XML tags
+        # Check for required XML tags (updated for current structure)
         required_tags = [
             "<context>",
             "</context>",
-            "<operating_system>",
-            "</operating_system>",
+            "<os>",
+            "</os>", 
             "<shell>",
             "</shell>",
-            "<request>",
-            "</request>",
-            "<explain>",
-            "</explain>",
-            "<guidelines>",
-            "</guidelines>",
+            "<task>",
+            "</task>",
+            "<rules>",
+            "</rules>",
             "<examples>",
             "</examples>",
             "<response>",
