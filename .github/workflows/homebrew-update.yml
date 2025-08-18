@@ -16,7 +16,7 @@ jobs:
     
     steps:
     - name: Checkout main repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -65,7 +65,7 @@ jobs:
         fi
         
     - name: Checkout Homebrew tap repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: phisanti/homebrew-code-djinn
         token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
