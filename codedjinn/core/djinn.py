@@ -141,6 +141,7 @@ class Djinn:
             self.shell,
             self.system_prompt_preferences,
             self.shell_path,
+            session_id,
         )
 
         # Start the chat session
@@ -149,7 +150,7 @@ class Djinn:
     @classmethod
     def from_config(cls, config: dict, api_key: str):
         """
-        Fast factory method to create Djinn from configuration.
+        Factory method to create Djinn from configuration.
 
         Args:
             config: Configuration dictionary

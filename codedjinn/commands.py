@@ -12,7 +12,7 @@ def handle_clear_cache():
     from .utils import print_text
 
     clear_llm_cache()
-    print_text("✓ LLM client cache cleared", "green")
+    print_text("LLM client cache cleared", "green")
 
 
 def handle_list_models():
@@ -109,11 +109,13 @@ def _create_execution_mode():
         return None
 
 
+
 def handle_chat(session_id: str = ""):
-    """Handle chat mode command."""
+    """Handle interactive chat with persistent sessions and command output capture."""
     from .config import ConfigManager
     from .core.djinn import Djinn
-    from .utils import print_text
+    from .modes.chat_mode import ChatMode
+    from .utils import print_text, get_current_shell, get_shell_path
 
     try:
         # Fast config loading
@@ -133,11 +135,27 @@ def handle_chat(session_id: str = ""):
         provider = config["LLM_PROVIDER"].lower()
         api_key_name = config_manager.get_api_key_name(provider)
 
-        # Create fast djinn instance
+        # Create djinn instance for LLM access
         djinn = Djinn.from_config(config, config[api_key_name])
+        llm = djinn._get_llm()
 
-        # Start chat mode
-        djinn.start_chat(session_id if session_id else None)
+        # Get shell info for enhanced command execution
+        shell = get_current_shell()
+        shell_path = get_shell_path(shell)
+
+        # Create ChatMode directly
+        chat_mode = ChatMode(
+            llm,
+            djinn.provider,
+            djinn.os_fullname,
+            shell,
+            djinn.system_prompt_preferences,
+            shell_path,
+            session_id if session_id else None
+        )
+
+        # Start the chat session
+        chat_mode.start_chat_session()
 
     except Exception as e:
         print_text(f"Error: {e}", "red")

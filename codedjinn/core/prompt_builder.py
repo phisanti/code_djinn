@@ -165,7 +165,8 @@ def build_chat_prompt(
 
         <rules>
         - For questions/conversation: Respond with <answer>your response</answer>
-        - For command requests: Use <command>shell_command</command> with optional <description>explanation</description>
+        - For command requests: Use <answer>explanation of what you're doing</answer><command>shell_command</command>
+        - Include explanation in the answer field, not separate description tags
         - You can provide both answer AND command when it makes sense
         - Be conversational, consider context and current directory
         - Keep responses concise and practical
@@ -180,7 +181,7 @@ def build_chat_prompt(
         <response><answer>I'm doing great! Ready to help with your command-line tasks.</answer></response>
 
         <user>Find large log files</user>
-        <response><command>find . -name "*.log" -size +10M</command><description>Find log files larger than 10MB</description></response>
+        <response><answer>I'll search for log files larger than 10MB in the current directory and its subdirectories.</answer><command>find . -name "*.log" -size +10M</command></response>
         </examples>
 
     Respond using <answer> for conversation and/or <command>/<description> for shell commands."""

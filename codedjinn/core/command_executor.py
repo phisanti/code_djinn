@@ -358,8 +358,7 @@ class CommandExecutor:
 
     def _run_with_shell_support(self, command: str) -> subprocess.CompletedProcess:
         """
-        Execute command with proper shell support including aliases.
-        Uses the pre-configured shell path for optimal performance.
+        Execute command with shell support and signal isolation.
 
         Args:
             command: The command to execute
@@ -367,9 +366,53 @@ class CommandExecutor:
         Returns:
             CompletedProcess result
         """
-        # Use shell path with interactive mode for alias/function support
-        if self.shell_path and self.shell in ["fish", "zsh", "bash"]:
-            return subprocess.run([self.shell_path, "-i", "-c", command], timeout=30)
+        # Set environment to prevent pagers from interfering with chat session
+        env = self._get_no_pager_env()
+        
+        try:
+            # Use shell path with proper signal isolation
+            if self.shell_path and self.shell in ["fish", "zsh", "bash"]:
+                return subprocess.run(
+                    [self.shell_path, "-c", command],  # Removed -i flag to prevent signal sharing
+                    timeout=30,
+                    env=env,
+                    start_new_session=True,  # Start in new process group to isolate signals
+                    stdin=subprocess.DEVNULL,  # Prevent stdin issues
+                )
 
-        # Fallback to generic shell execution if no shell path available
-        return subprocess.run(command, shell=True, timeout=30)
+            # Fallback to generic shell execution if no shell path available
+            return subprocess.run(
+                command, 
+                shell=True, 
+                timeout=30, 
+                env=env,
+                start_new_session=True,  # Start in new process group to isolate signals
+                stdin=subprocess.DEVNULL,  # Prevent stdin issues
+            )
+        except Exception as e:
+            # If subprocess fails, create a mock failed result to maintain interface
+            from types import SimpleNamespace
+            return SimpleNamespace(returncode=1, stdout='', stderr=str(e))
+
+    def _get_no_pager_env(self) -> dict:
+        """
+        Get environment variables that disable pagers.
+        
+        Returns:
+            Environment dictionary with pager settings disabled
+        """
+        import os
+        
+        # Start with current environment
+        env = os.environ.copy()
+        
+        # Disable pagers for common commands that might interfere with chat
+        env.update({
+            'PAGER': 'cat',           # General pager override
+            'GIT_PAGER': 'cat',       # Git-specific pager
+            'LESS': '',               # Clear any LESS options
+            'MORE': '',               # Clear any MORE options
+            'GIT_CONFIG_NOSYSTEM': '1',  # Prevent git from reading system config that might set pagers
+        })
+        
+        return env

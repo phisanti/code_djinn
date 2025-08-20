@@ -99,21 +99,19 @@ class ResponseParser:
         Parse chat response that may contain questions, commands, or both.
 
         Expected XML format:
-        <answer>conversational response</answer>
+        <answer>conversational response and command explanation</answer>
         <command>shell_command</command>
-        <description>what the command does</description>
 
         Args:
             response_text: Raw response text from the LLM
 
         Returns:
-            dict with keys: 'type', 'answer', 'command', 'description'
+            dict with keys: 'type', 'answer', 'command'
         """
         result = {
             "type": "answer",  # Default to conversational
             "answer": None,
             "command": None,
-            "description": None,
         }
 
         # Parse XML tags using existing regex patterns
@@ -123,15 +121,26 @@ class ResponseParser:
             r"<description>(.*?)</description>", response_text, DOTALL
         )
 
+        # Build unified answer field
+        answer_parts = []
+        
         if answer_match:
-            result["answer"] = answer_match.group(1).strip()
+            answer_parts.append(answer_match.group(1).strip())
 
         if command_match:
             result["command"] = command_match.group(1).strip()
             result["type"] = "command" if not answer_match else "both"
 
+            # If there's a separate description, merge it into the answer
             if description_match:
-                result["description"] = description_match.group(1).strip()
+                description_text = description_match.group(1).strip()
+                # Only add description if it's not already in the answer
+                if description_text.lower() not in (answer_parts[0].lower() if answer_parts else ""):
+                    answer_parts.append(description_text)
+
+        # Combine all parts into unified answer
+        if answer_parts:
+            result["answer"] = "\n\n".join(answer_parts) if len(answer_parts) > 1 else answer_parts[0]
 
         # Fallback for non-XML responses
         if not answer_match and not command_match:
