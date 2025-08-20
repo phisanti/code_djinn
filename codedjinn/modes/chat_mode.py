@@ -52,7 +52,7 @@ class ChatMode(BaseMode):
         """Start and manage the interactive chat session loop."""
         print_text("🧞 Code Djinn Interactive Chat", "green")
         print_text(f"Session: {self.session.session_id}", "gray")
-        print_text("Type 'exit' to quit, 'clear' to clear session, 'sessions' to list all sessions", "gray")
+        print_text("Commands: /exit /clear /sessions /load <id> /run <command>", "gray")
         
         # Show session restoration info if continuing existing session
         if self.session.messages:
@@ -67,20 +67,12 @@ class ChatMode(BaseMode):
                 
                 user_input = self.chat_prompt.get_input(f"\n[{current_dir}|{session_short}]> ")
 
-                if user_input.lower() == "exit":
-                    print_text(f"\nSession {self.session.session_id} saved", "green")
-                    break
-                elif user_input.lower() == "clear":
-                    self.session.clear_session()
-                    print_text("Session cleared", "yellow")
-                    continue
-                elif user_input.lower() == "sessions":
-                    self._list_sessions()
-                    continue
-                elif user_input.lower().startswith("load "):
-                    session_id = user_input[5:].strip()
-                    self._load_session(session_id)
-                    continue
+                # Handle forward slash commands
+                if user_input.startswith("/"):
+                    if self._handle_slash_command(user_input):
+                        continue
+                    else:
+                        break  # Exit if _handle_slash_command returns False
 
                 if user_input:  # Only process non-empty input
                     self._process_input(user_input)
@@ -97,6 +89,54 @@ class ChatMode(BaseMode):
                 print_text(f"\nUnexpected error: {e}", "red")
                 print_text("Continuing chat session...", "yellow")
                 continue
+
+    def _handle_slash_command(self, user_input: str) -> bool:
+        """
+        Handle forward slash commands in chat mode.
+        
+        Args:
+            user_input: The user input starting with '/'
+            
+        Returns:
+            True to continue chat loop, False to exit
+        """
+        command_parts = user_input.split()
+        command = command_parts[0].lower()
+        
+        if command == "/exit":
+            print_text(f"\nSession {self.session.session_id} saved", "green")
+            return False
+            
+        elif command == "/clear":
+            self.session.clear_session()
+            print_text("Session cleared", "yellow")
+            return True
+            
+        elif command == "/sessions":
+            self._list_sessions()
+            return True
+            
+        elif command == "/load":
+            if len(command_parts) < 2:
+                print_text("Usage: /load <session_id>", "red")
+                return True
+            session_id = " ".join(command_parts[1:]).strip()
+            self._load_session(session_id)
+            return True
+            
+        elif command == "/run":
+            if len(command_parts) < 2:
+                print_text("Usage: /run <shell_command>", "red")
+                return True
+            # Extract the command after "/run "
+            shell_command = user_input[5:].strip()  # Remove "/run " prefix
+            self._execute_direct_command(shell_command)
+            return True
+            
+        else:
+            print_text(f"Unknown command: {command}", "red")
+            print_text("Available commands: /exit /clear /sessions /load <id> /run <command>", "gray")
+            return True
 
     def _process_input(self, user_input: str):
         """Process user input and generate appropriate response using session context."""
@@ -193,6 +233,27 @@ class ChatMode(BaseMode):
                 return
 
         # Execute and capture output
+        success, stdout, stderr = self.executor.execute_with_confirmation(
+            command, None, auto_confirm=True, verbose=False, quiet=True
+        )
+
+        # Show execution result
+        result = "✓ Done" if success else "✗ Failed"
+        print_text(result, "green" if success else "red")
+
+        # Capture command execution in session for context
+        self.session.add_command_execution(command, success, stdout or "", stderr or "")
+
+    def _execute_direct_command(self, command: str):
+        """
+        Execute a shell command directly via /run command.
+        
+        Args:
+            command: The shell command to execute
+        """
+        print_text(f"\nExecuting: {command}", "cyan")
+        
+        # Execute with confirmation and capture output
         success, stdout, stderr = self.executor.execute_with_confirmation(
             command, None, auto_confirm=True, verbose=False, quiet=True
         )

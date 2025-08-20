@@ -23,6 +23,7 @@ setup(
         "langchain-mistralai>=0.2.9",
         "langchain-google-genai>=2.1.1",
         "python-dotenv>=1.0.0",
+        "prompt_toolkit>=3.0.0",
     ],
     entry_points={
         "console_scripts": [
