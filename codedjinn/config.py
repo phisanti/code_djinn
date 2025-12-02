@@ -2,7 +2,7 @@ import os
 import configparser
 from pathlib import Path
 from dotenv import dotenv_values, set_key
-from .utils import print_text
+from .ui.output import UIManager
 from typing import Dict, Tuple, Optional, Any
 
 
@@ -32,6 +32,9 @@ class ConfigManager:
 
         # Cache for configuration
         self._config_cache = None
+
+        # UI manager for output
+        self.ui = UIManager()
 
     def load_config(self, use_cache: bool = True) -> Dict[str, str]:
         """
@@ -68,7 +71,7 @@ class ConfigManager:
                 self._config_cache = config_dict
                 return config_dict
             except Exception as e:
-                print_text(f"Error loading config from {self.config_file}: {e}", "red")
+                self.ui.error(f"Error loading config from {self.config_file}: {e}")
 
         # Fall back to .env if available
         if self.env_path.exists():
@@ -79,7 +82,7 @@ class ConfigManager:
                 self._config_cache = config_dict
                 return self._config_cache
             except Exception as e:
-                print_text(f"Error loading config from {self.env_path}: {e}", "red")
+                self.ui.error(f"Error loading config from {self.env_path}: {e}")
 
         # No config found
         self._config_cache = {}
@@ -112,6 +115,16 @@ class ConfigManager:
                 "SYSTEM_PROMPT_PREFERENCES": config.get(
                     "SYSTEM_PROMPT_PREFERENCES", ""
                 ),
+                # New Agno configuration fields
+                "AGENT_TEMPERATURE": config.get("AGENT_TEMPERATURE", "0.15"),
+                "AGENT_MAX_TOKENS": config.get("AGENT_MAX_TOKENS", "1000"),
+                "AGENT_TIMEOUT": config.get("AGENT_TIMEOUT", "30"),
+                "SAFETY_POLICY": config.get("SAFETY_POLICY", "balanced"),
+                "ENABLE_SHELL_TOOLS": config.get("ENABLE_SHELL_TOOLS", "true"),
+                "ENABLE_FILESYSTEM_TOOLS": config.get("ENABLE_FILESYSTEM_TOOLS", "true"),
+                "ENABLE_GIT_TOOLS": config.get("ENABLE_GIT_TOOLS", "false"),
+                "ENABLE_WEB_TOOLS": config.get("ENABLE_WEB_TOOLS", "false"),
+                "FILESYSTEM_READONLY": config.get("FILESYSTEM_READONLY", "true"),
             }
 
             # Add API keys section
@@ -124,13 +137,13 @@ class ConfigManager:
             with open(self.config_file, "w") as f:
                 cfg.write(f)
 
-            print_text(f"Config file saved at {self.config_file}", "green")
+            self.ui.success(f"Config file saved at {self.config_file}")
 
             # Update cache
             self._config_cache = config
             return True
         except Exception as e:
-            print_text(f"Error saving config to {self.config_file}: {e}", "red")
+            self.ui.error(f"Error saving config to {self.config_file}: {e}")
             return False
 
     def update_legacy_config(self, config: Dict[str, str]) -> bool:
@@ -145,12 +158,12 @@ class ConfigManager:
         """
         if self.env_path.exists():
             try:
-                print_text(f"Also updating legacy config at {self.env_path}", "blue")
+                self.ui.info(f"Also updating legacy config at {self.env_path}")
                 for key, value in config.items():
                     set_key(self.env_path, key, value)
                 return True
             except Exception as e:
-                print_text(f"Error updating legacy config: {e}", "red")
+                self.ui.error(f"Error updating legacy config: {e}")
                 return False
         return False
 
@@ -204,3 +217,158 @@ class ConfigManager:
     def clear_cache(self) -> None:
         """Clear the configuration cache"""
         self._config_cache = None
+
+    # ===== NEW AGNO ARCHITECTURE METHODS =====
+
+    def get_safety_policy(self) -> str:
+        """
+        Get the configured safety policy.
+
+        Returns:
+            Safety policy name (loose, balanced, strict)
+        """
+        config = self.load_config()
+        return config.get("SAFETY_POLICY", "balanced")
+
+    def set_safety_policy(self, policy: str) -> bool:
+        """
+        Set the safety policy.
+
+        Args:
+            policy: Policy name (loose, balanced, strict)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if policy not in ["loose", "balanced", "strict"]:
+            return False
+
+        config = self.load_config()
+        config["SAFETY_POLICY"] = policy
+        return self.save_config(config)
+
+    def get_agent_config(self) -> Dict[str, Any]:
+        """
+        Get agent-specific configuration.
+
+        Returns:
+            Dictionary with agent configuration
+        """
+        config = self.load_config()
+        return {
+            "provider": config.get("LLM_PROVIDER", "gemini"),
+            "model": config.get("LLM_MODEL", "gemini-2.5-flash"),
+            "temperature": float(config.get("AGENT_TEMPERATURE", "0.15")),
+            "max_tokens": int(config.get("AGENT_MAX_TOKENS", "1000")),
+            "timeout": int(config.get("AGENT_TIMEOUT", "30")),
+        }
+
+    def set_agent_config(self, agent_config: Dict[str, Any]) -> bool:
+        """
+        Set agent-specific configuration.
+
+        Args:
+            agent_config: Dictionary with agent configuration
+
+        Returns:
+            True if successful, False otherwise
+        """
+        config = self.load_config()
+
+        if "provider" in agent_config:
+            config["LLM_PROVIDER"] = agent_config["provider"]
+        if "model" in agent_config:
+            config["LLM_MODEL"] = agent_config["model"]
+        if "temperature" in agent_config:
+            config["AGENT_TEMPERATURE"] = str(agent_config["temperature"])
+        if "max_tokens" in agent_config:
+            config["AGENT_MAX_TOKENS"] = str(agent_config["max_tokens"])
+        if "timeout" in agent_config:
+            config["AGENT_TIMEOUT"] = str(agent_config["timeout"])
+
+        return self.save_config(config)
+
+    def get_tool_config(self) -> Dict[str, Any]:
+        """
+        Get tool-specific configuration.
+
+        Returns:
+            Dictionary with tool configuration
+        """
+        config = self.load_config()
+        return {
+            "enable_shell": config.get("ENABLE_SHELL_TOOLS", "true").lower() == "true",
+            "enable_filesystem": config.get("ENABLE_FILESYSTEM_TOOLS", "true").lower() == "true",
+            "enable_git": config.get("ENABLE_GIT_TOOLS", "false").lower() == "true",
+            "enable_web": config.get("ENABLE_WEB_TOOLS", "false").lower() == "true",
+            "filesystem_readonly": config.get("FILESYSTEM_READONLY", "true").lower() == "true",
+        }
+
+    def set_tool_config(self, tool_config: Dict[str, Any]) -> bool:
+        """
+        Set tool-specific configuration.
+
+        Args:
+            tool_config: Dictionary with tool configuration
+
+        Returns:
+            True if successful, False otherwise
+        """
+        config = self.load_config()
+
+        if "enable_shell" in tool_config:
+            config["ENABLE_SHELL_TOOLS"] = str(tool_config["enable_shell"]).lower()
+        if "enable_filesystem" in tool_config:
+            config["ENABLE_FILESYSTEM_TOOLS"] = str(tool_config["enable_filesystem"]).lower()
+        if "enable_git" in tool_config:
+            config["ENABLE_GIT_TOOLS"] = str(tool_config["enable_git"]).lower()
+        if "enable_web" in tool_config:
+            config["ENABLE_WEB_TOOLS"] = str(tool_config["enable_web"]).lower()
+        if "filesystem_readonly" in tool_config:
+            config["FILESYSTEM_READONLY"] = str(tool_config["filesystem_readonly"]).lower()
+
+        return self.save_config(config)
+
+    def get_agno_config(self) -> Dict[str, Any]:
+        """
+        Get complete Agno configuration for easy initialization.
+
+        Returns:
+            Dictionary with all Agno-related configuration
+        """
+        base_config = self.load_config()
+
+        return {
+            # Base system info
+            "OS": base_config.get("OS", ""),
+            "OS_FULLNAME": base_config.get("OS_FULLNAME", ""),
+            "SHELL": base_config.get("SHELL", ""),
+            "SHELL_PATH": base_config.get("SHELL_PATH", ""),
+
+            # LLM configuration
+            "LLM_PROVIDER": base_config.get("LLM_PROVIDER", "gemini"),
+            "LLM_MODEL": base_config.get("LLM_MODEL", "gemini-2.5-flash"),
+
+            # API keys
+            "DEEPINFRA_API_TOKEN": base_config.get("DEEPINFRA_API_TOKEN", ""),
+            "MISTRAL_API_KEY": base_config.get("MISTRAL_API_KEY", ""),
+            "GEMINI_API_KEY": base_config.get("GEMINI_API_KEY", ""),
+
+            # Agent configuration
+            "AGENT_TEMPERATURE": base_config.get("AGENT_TEMPERATURE", "0.15"),
+            "AGENT_MAX_TOKENS": base_config.get("AGENT_MAX_TOKENS", "1000"),
+            "AGENT_TIMEOUT": base_config.get("AGENT_TIMEOUT", "30"),
+
+            # Safety policy
+            "SAFETY_POLICY": base_config.get("SAFETY_POLICY", "balanced"),
+
+            # Tool configuration
+            "ENABLE_SHELL_TOOLS": base_config.get("ENABLE_SHELL_TOOLS", "true"),
+            "ENABLE_FILESYSTEM_TOOLS": base_config.get("ENABLE_FILESYSTEM_TOOLS", "true"),
+            "ENABLE_GIT_TOOLS": base_config.get("ENABLE_GIT_TOOLS", "false"),
+            "ENABLE_WEB_TOOLS": base_config.get("ENABLE_WEB_TOOLS", "false"),
+            "FILESYSTEM_READONLY": base_config.get("FILESYSTEM_READONLY", "true"),
+
+            # System preferences
+            "SYSTEM_PROMPT_PREFERENCES": base_config.get("SYSTEM_PROMPT_PREFERENCES", ""),
+        }

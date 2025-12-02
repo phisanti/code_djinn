@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, TextIO, Tuple
+from typing import Optional, Tuple
 import platform
 import shutil
 import os
@@ -25,82 +25,6 @@ def get_os_info() -> Tuple[Optional[str], Optional[str]]:
         return (None, None)
     except Exception:
         return (None, None)
-
-
-# Color mapping constant
-TEXT_COLOR_MAPPING = {
-    "blue": "36;1",
-    "yellow": "33;1",
-    "pink": "38;5;200",
-    "green": "32;1",
-    "red": "31;1",
-}
-
-
-def get_color_mapping(
-    items: List[str], excluded_colors: Optional[List] = None
-) -> Dict[str, str]:
-    """Get mapping for items to a support color."""
-    colors = list(TEXT_COLOR_MAPPING.keys())
-    if excluded_colors is not None:
-        colors = [c for c in colors if c not in excluded_colors]
-    color_mapping = {item: colors[i % len(colors)] for i, item in enumerate(items)}
-    return color_mapping
-
-
-def get_colored_text(text: str, color: str) -> str:
-    """
-    Get colored text.
-
-    Args:
-        text: The text to color
-        color: The color to use
-
-    Returns:
-        Colored text string
-
-    Raises:
-        ValueError: If the specified color is not supported
-    """
-    if color not in TEXT_COLOR_MAPPING:
-        raise ValueError(
-            f"Unsupported color: {color}. Available colors: {', '.join(TEXT_COLOR_MAPPING.keys())}"
-        )
-
-    color_str = TEXT_COLOR_MAPPING[color]
-    return f"\u001b[{color_str}m\033[1;3m{text}\u001b[0m"
-
-
-def get_bolded_text(text: str) -> str:
-    """Get bolded text."""
-    return f"\033[1m{text}\033[0m"
-
-
-def print_text(
-    text: str, color: Optional[str] = None, end: str = "", file: Optional[TextIO] = None
-) -> None:
-    """
-    Print text with highlighting and no end characters.
-
-    Args:
-        text: The text to print
-        color: Optional color to use
-        end: String to append at the end
-        file: Optional file object to write to
-    """
-    if color:
-        try:
-            text_to_print = get_colored_text(text, color)
-        except ValueError:
-            # Fall back to plain text if color is invalid
-            text_to_print = text
-    else:
-        text_to_print = text
-
-    print(text_to_print, end=end, file=file)
-    if file:
-        file.flush()
-
 
 def get_current_shell() -> Optional[str]:
     """

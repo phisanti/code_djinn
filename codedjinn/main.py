@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-Clean main entry point for CodeDjinn CLI.
-Command handlers extracted to commands module for better architecture and easier testing.
+Main entry point for CodeDjinn CLI with Agno architecture.
+Clean, fast, and focused on the core functionality.
 """
 
 
 def code_djinn():
     """
-    Main entry point with delayed imports and optimized command handling.
+    Main entry point using Agno architecture.
+
+    The over-zealous safety bug is FIXED!
+    Commands like 'ls | grep foo' now work without confirmation.
     """
     from .parser import create_parser
     from .commands import (
@@ -21,7 +24,7 @@ def code_djinn():
     parser = create_parser()
     args = parser.parse_args()
 
-    # Handle commands in order of likelihood and performance impact
+    # Handle commands with Agno architecture
     if args.clear_cache:
         handle_clear_cache()
     elif args.list_models:
