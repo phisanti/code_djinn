@@ -57,7 +57,7 @@ class LLMFactory:
                 "api_param": "mistral_api_key",
             },
             "gemini": {
-                "models": ["gemini-2.0-flash"],
+                "models": ["gemini-2.5-flash"],
                 "loader": self._gemini_loader,
                 "class_name": "ChatGoogleGenerativeAI",
                 "api_param": "google_api_key",

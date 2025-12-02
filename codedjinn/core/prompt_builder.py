@@ -163,13 +163,23 @@ def build_chat_prompt(
         <user_input>$user_input</user_input>
         </context>{system_prefs_section}
 
+        <thinking_process>
+        Before responding, always consider:
+        1. Is this a direct question that can be answered without running commands?
+        2. Is this a request to actually DO something that requires execution?
+        3. Can I provide helpful information first before suggesting a command?
+        4. Would running a command add value, or is an explanation sufficient?
+        </thinking_process>
+
         <rules>
-        - For questions/conversation: Respond with <answer>your response</answer>
+        - THINK FIRST: Consider if the user wants information vs. action
+        - For questions/conversation: Respond with <answer>your response</answer> ONLY
         - For command requests: Use <answer>explanation of what you're doing</answer><command>shell_command</command>
         - Include explanation in the answer field, not separate description tags
         - You can provide both answer AND command when it makes sense
         - Be conversational, consider context and current directory
         - Keep responses concise and practical
+        - Don't execute commands for simple questions that can be answered directly
         {preferences_guideline}
         </rules>
 
@@ -177,15 +187,97 @@ def build_chat_prompt(
         <user>What files are in this directory?</user>
         <response><answer>Let me show you the files in this directory.</answer><command>ls -la</command></response>
 
+        <user>How do I list files in a directory?</user>
+        <response><answer>You can list files using the 'ls' command. Use 'ls -la' to show all files with detailed information including hidden files, permissions, sizes, and timestamps.</answer></response>
+
         <user>How are you doing today?</user>
         <response><answer>I'm doing great! Ready to help with your command-line tasks.</answer></response>
+
+        <user>What does the ls command do?</user>
+        <response><answer>The 'ls' command lists directory contents. Common options: -l (detailed format), -a (show hidden files), -h (human-readable sizes), -t (sort by time). You can combine them like 'ls -la' for detailed listing of all files.</answer></response>
 
         <user>Find large log files</user>
         <response><answer>I'll search for log files larger than 10MB in the current directory and its subdirectories.</answer><command>find . -name "*.log" -size +10M</command></response>
         </examples>
 
-    Respond using <answer> for conversation and/or <command>/<description> for shell commands."""
+    Respond using <answer> for conversation and/or <command> for shell commands when execution is actually needed."""
 
     return PromptBuilder(
         template=template, input_variables=["current_dir", "context", "user_input"]
     )
+
+
+def build_safety_assessment_prompt(os_fullname: str, shell: str) -> PromptBuilder:
+    """
+    Build a prompt for AI-based command safety assessment.
+
+    Args:
+        os_fullname: The operating system name
+        shell: The shell being used
+
+    Returns:
+        PromptBuilder instance configured for safety assessment
+    """
+    template = f"""You are a command safety expert for {os_fullname}/{shell}. Analyze the given command and assess its risk level.
+
+<context>
+<os>{os_fullname}</os>
+<shell>{shell}</shell>
+<command>$command</command>
+</context>
+
+<assessment_criteria>
+LOW RISK - Commands that only read/view data:
+- File listing (ls, dir, tree)
+- File viewing (cat, less, more, head, tail)
+- System info (ps, df, free, uptime, whoami)
+- Text processing (grep, awk, sed, sort, uniq)
+- Git read operations (git status, git log, git diff)
+- Package info (npm list, pip list)
+
+MEDIUM RISK - Commands that modify but are generally safe:
+- File operations on user files (cp, mv within user space)
+- Directory creation (mkdir)
+- Text editing with specific files
+- Git operations (git add, git commit)
+- Package installation in user space
+- Network requests to known safe domains
+
+HIGH RISK - Commands that could cause system damage:
+- File deletion (rm, del, especially with wildcards or system paths)
+- System modifications (chmod +x, chown)
+- Privileged operations (sudo, su)
+- System control (shutdown, reboot, kill processes)
+- Disk operations (dd, fdisk, format)
+- Code execution from untrusted sources
+- Mass file operations across system directories
+- Piping to shell interpreters
+</assessment_criteria>
+
+<examples>
+<command>ls -la</command>
+<safety>low</safety>
+
+<command>git status</command>
+<safety>low</safety>
+
+<command>cp file.txt backup.txt</command>
+<safety>medium</safety>
+
+<command>rm -rf /</command>
+<safety>high</safety>
+
+<command>sudo apt install package</command>
+<safety>high</safety>
+
+<command>mkdir project_folder</command>
+<safety>medium</safety>
+
+<command>curl -sSL script.sh | bash</command>
+<safety>high</safety>
+</examples>
+
+Analyze the command and respond with ONLY the safety level in XML format:
+<safety>low|medium|high</safety>"""
+
+    return PromptBuilder(template=template, input_variables=["command"])

@@ -42,7 +42,7 @@ class ChatPrompt:
     
     def get_confirmation(self, message: str, dangerous: bool = False) -> str:
         """Get confirmation input without history (for safety)."""
-        prefix = "⚠️  " if dangerous else ""
+        prefix = "WARNING: " if dangerous else ""
         try:
             return prompt(f"{prefix}{message}").strip()
         except KeyboardInterrupt:

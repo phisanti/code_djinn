@@ -48,6 +48,7 @@ class CommandExecutor:
         auto_confirm: bool = False,
         verbose: bool = False,
         quiet: bool = False,
+        require_yes: bool = False,
     ) -> Tuple[bool, str, str]:
         """
         Execute a command after user confirmation.
@@ -58,10 +59,16 @@ class CommandExecutor:
             auto_confirm: Skip confirmation (for testing)
             verbose: Whether to show success/status messages
             quiet: Skip all prompts and prefaces (for chat mode)
+            require_yes: Require explicit "YES" confirmation for high-risk commands
 
         Returns:
             Tuple of (success, stdout, stderr)
         """
+        # Check if command is dangerous and upgrade require_yes if needed
+        is_dangerous = self._is_dangerous_command(command)
+        if is_dangerous and not require_yes:
+            require_yes = True
+
         # Skip preface in quiet mode (for chat mode integration)
         if not quiet:
             # Simple confirmation prompt matching intended UX
@@ -70,24 +77,21 @@ class CommandExecutor:
             if description:
                 print_text(f"Description: {description}", "pink")
 
-            # Safety check for dangerous commands
-            is_dangerous = self._is_dangerous_command(command)
+            # Show warning for dangerous commands
             if is_dangerous:
-                print_text(
-                    "⚠️  WARNING: This command may be potentially dangerous!\n", "red"
-                )
+                print_text("\nWARNING: This command is potentially dangerous!", "red")
 
         # Get user confirmation (quiet mode skips this completely)
         if not auto_confirm and not quiet:
-            # Check if dangerous when not in quiet mode
-            is_dangerous = self._is_dangerous_command(command)
-            if is_dangerous:
+            if require_yes:
+                # High risk commands require explicit "YES"
                 response = input("Type 'YES' to confirm: ").strip()
                 if response != "YES":
                     print_text("Command execution cancelled.", "yellow")
                     return False, "", "Execution cancelled by user"
             else:
-                response = input().strip().lower()
+                # Medium risk commands use traditional confirmation (y/yes/enter)
+                response = input("Continue? (y/N): ").strip().lower()
                 if response not in ["", "y", "yes"]:
                     print_text("Command execution cancelled.", "yellow")
                     return False, "", "Execution cancelled by user"
@@ -337,10 +341,10 @@ class CommandExecutor:
             # Display status only if verbose or has description
             if verbose or has_description:
                 if success:
-                    print_text("✓ Command executed successfully", "green")
+                    print_text("Command executed successfully", "green")
                 else:
                     print_text(
-                        f"✗ Command failed (exit code: {result.returncode})", "red"
+                        f"Command failed (exit code: {result.returncode})", "red"
                     )
 
             # Return empty strings for stdout/stderr since we're not capturing

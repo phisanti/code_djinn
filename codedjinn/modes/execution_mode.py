@@ -1,7 +1,10 @@
 from typing import Optional, Tuple
 from .base_mode import BaseMode
 from ..core.command_executor import CommandExecutor
+from ..core.prompt_builder import build_safety_assessment_prompt
+from ..core.response_parser import ResponseParser
 from ..utils import print_text
+import re
 
 
 class ExecutionMode(BaseMode):
@@ -98,9 +101,9 @@ class ExecutionMode(BaseMode):
             # Show final status if verbose or has description
             if verbose or description:
                 if success:
-                    print_text("\n✓ Command completed successfully", "green")
+                    print_text("\nCommand completed successfully", "green")
                 else:
-                    print_text("\n✗ Command execution failed", "red")
+                    print_text("\nCommand execution failed", "red")
 
             return success
 
@@ -112,7 +115,7 @@ class ExecutionMode(BaseMode):
         self, wish: str, explain: bool = False, verbose: bool = False
     ) -> bool:
         """
-        Generate and execute command - auto-execute safe commands, confirm dangerous ones.
+        Generate and execute command using AI-based safety assessment.
 
         Args:
             wish: The user's request
@@ -136,42 +139,112 @@ class ExecutionMode(BaseMode):
             if description and explain:
                 print_text(f"Description: {description}", "pink")
 
-            # Check if command is dangerous
-            is_dangerous = self.executor._is_dangerous_command(command)
-
-            if is_dangerous:
-                print_text(
-                    "\n⚠️  Potentially dangerous command detected, requiring confirmation...",
-                    "yellow",
-                )
-                # Execute the already generated command with confirmation (no double LLM call)
-                success, _, _ = self.executor.execute_with_confirmation(
-                    command,
-                    description if explain else None,
-                    auto_confirm=False,
-                    verbose=verbose,
-                )
-                if verbose or description:
-                    if success:
-                        print_text("\n✓ Command completed successfully", "green")
-                    else:
-                        print_text("\n✗ Command execution failed", "red")
-                return success
-            else:
-                # Safe command - execute directly
+            # Use AI to assess command safety
+            safety_level = self._assess_command_safety(command)
+            
+            if safety_level == "low":
+                # Low risk - execute directly without confirmation
+                print_text("Command assessed as low risk", "green")
                 success, _, _ = self.executor.execute_with_confirmation(
                     command,
                     description if explain else None,
                     auto_confirm=True,
                     verbose=verbose,
+                    quiet=True,  # Skip confirmation prompts for low risk
                 )
                 if verbose or description:
                     if success:
-                        print_text("\n✓ Command completed successfully", "green")
+                        print_text("\nCommand completed successfully", "green")
                     else:
-                        print_text("\n✗ Command execution failed", "red")
+                        print_text("\nCommand execution failed", "red")
+                return success
+                
+            elif safety_level == "medium":
+                # Medium risk - use traditional confirmation (y/yes/enter)
+                print_text("WARNING: Command assessed as medium risk", "yellow")
+                success, _, _ = self.executor.execute_with_confirmation(
+                    command,
+                    description if explain else None,
+                    auto_confirm=False,
+                    verbose=verbose,
+                    require_yes=False,  # Traditional confirmation
+                )
+                if verbose or description:
+                    if success:
+                        print_text("\nCommand completed successfully", "green")
+                    else:
+                        print_text("\nCommand execution failed", "red")
+                return success
+                
+            elif safety_level == "high":
+                # High risk - require explicit "YES" confirmation
+                print_text("DANGER: Command assessed as high risk - explicit confirmation required", "red")
+                success, _, _ = self.executor.execute_with_confirmation(
+                    command,
+                    description if explain else None,
+                    auto_confirm=False,
+                    verbose=verbose,
+                    require_yes=True,  # Require "YES" for high risk
+                )
+                if verbose or description:
+                    if success:
+                        print_text("\nCommand completed successfully", "green")
+                    else:
+                        print_text("\nCommand execution failed", "red")
+                return success
+            else:
+                # Fallback to old behavior if AI assessment fails
+                print_text("WARNING: Could not assess command safety, using legacy check...", "yellow")
+                is_dangerous = self.executor._is_dangerous_command(command)
+                success, _, _ = self.executor.execute_with_confirmation(
+                    command,
+                    description if explain else None,
+                    auto_confirm=not is_dangerous,
+                    verbose=verbose,
+                    require_yes=is_dangerous,
+                )
+                if verbose or description:
+                    if success:
+                        print_text("\nCommand completed successfully", "green")
+                    else:
+                        print_text("\nCommand execution failed", "red")
                 return success
 
         except Exception as e:
             print_text(f"Error: {e}", "red")
             return False
+
+    def _assess_command_safety(self, command: str) -> str:
+        """
+        Use AI to assess the safety level of a command.
+
+        Args:
+            command: The command to assess
+
+        Returns:
+            Safety level: "low", "medium", "high", or "unknown" if assessment fails
+        """
+        try:
+            # Build safety assessment prompt
+            safety_prompt_builder = build_safety_assessment_prompt(
+                self.os_fullname, self.shell
+            )
+            
+            # Format the prompt with the command
+            safety_prompt = safety_prompt_builder.format(command=command)
+            
+            # Get AI assessment
+            response = self.llm.invoke(safety_prompt)
+            response_content = response.content if hasattr(response, 'content') else str(response)
+            
+            # Parse safety level from response
+            safety_match = re.search(r'<safety>\s*(low|medium|high)\s*</safety>', response_content.lower())
+            if safety_match:
+                return safety_match.group(1)
+            else:
+                print_text("Warning: Could not parse AI safety assessment", "yellow")
+                return "unknown"
+                
+        except Exception as e:
+            print_text(f"Warning: AI safety assessment failed: {e}", "yellow")
+            return "unknown"

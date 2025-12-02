@@ -50,7 +50,7 @@ class ChatMode(BaseMode):
 
     def start_chat_session(self):
         """Start and manage the interactive chat session loop."""
-        print_text("🧞 Code Djinn Interactive Chat", "green")
+        print_text("Code Djinn Interactive Chat", "green")
         print_text(f"Session: {self.session.session_id}", "gray")
         print_text("Commands: /exit /clear /sessions /load <id> /run <command>", "gray")
         
@@ -78,7 +78,7 @@ class ChatMode(BaseMode):
                     self._process_input(user_input)
 
             except KeyboardInterrupt:
-                print_text(f"\n\nSession {self.session.session_id} saved. Goodbye! 👋", "green")
+                print_text(f"\n\nSession {self.session.session_id} saved. Goodbye!", "green")
                 break
             except EOFError:
                 # Handle EOF gracefully - could be from subprocess pager exit
@@ -207,7 +207,7 @@ class ChatMode(BaseMode):
         is_dangerous = self.executor._is_dangerous_command(command)
 
         if is_dangerous:
-            print_text("⚠️  Potentially dangerous command", "yellow")
+            print_text("WARNING: Potentially dangerous command", "yellow")
             response = self.chat_prompt.get_confirmation(
                 "Type 'YES' to execute or Enter to cancel: ", dangerous=True
             )
@@ -238,7 +238,7 @@ class ChatMode(BaseMode):
         )
 
         # Show execution result
-        result = "✓ Done" if success else "✗ Failed"
+        result = "Done" if success else "Failed"
         print_text(result, "green" if success else "red")
 
         # Capture command execution in session for context
@@ -259,7 +259,7 @@ class ChatMode(BaseMode):
         )
 
         # Show execution result
-        result = "✓ Done" if success else "✗ Failed"
+        result = "Done" if success else "Failed"
         print_text(result, "green" if success else "red")
 
         # Capture command execution in session for context
