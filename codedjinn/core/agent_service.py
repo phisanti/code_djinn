@@ -54,8 +54,6 @@ class AgentService:
             model = self.create_model()
             instructions = self.get_instructions(mode)
             
-            import sys
-            sys.path.append('agno/libs/agno')
             from agno.agent import Agent
             
             return Agent(
@@ -82,8 +80,6 @@ class AgentService:
         temperature = float(self.config.get("AGENT_TEMPERATURE", "0.15"))
 
         try:
-            import sys
-            sys.path.append('agno/libs/agno')
             
             if provider == "gemini":
                 api_key = self.config.get("GEMINI_API_KEY")
