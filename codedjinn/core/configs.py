@@ -46,6 +46,8 @@ def _get_bool(raw: Dict[str, str], key: str, default: bool = False) -> bool:
     value = raw.get(key, "")
     if isinstance(value, bool):
         return value
+    if value is None:
+        return default
     return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 

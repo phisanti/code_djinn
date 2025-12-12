@@ -14,7 +14,7 @@ def _print_result(result: dict[str, str]) -> None:
     content = result.get("content", "")
     model = result.get("model", "")
     typer.echo(f"Model: {model}")
-    typer.echo(f"Response: {content}")
+    typer.echo(f"Response:\n{content}")
 
 
 @app.command()
@@ -29,9 +29,17 @@ def main(
     """
     Generate a command/answer via the configured agent.
 
-    This is intentionally minimal to validate Agno wiring.
+    This version enables shell tools so the agent can execute commands.
     """
-    parsed = run_and_parse(run)
+    instructions = (
+        "You are Code Djinn. Use the provided shell tools to run the user's "
+        "request in the current working directory. Return only the stdout."
+    )
+    parsed = run_and_parse(
+        run,
+        include_tools=True,
+        instructions_override=instructions,
+    )
     _print_result(parsed)
 
 

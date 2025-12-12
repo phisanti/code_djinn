@@ -1,1 +1,1 @@
-"""UI layer for Code Djinn CLI."""
+"""UI layer for the new Typer-based CLI."""

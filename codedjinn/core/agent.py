@@ -9,14 +9,18 @@ from codedjinn.core.configs import (
 )
 from codedjinn.core.parser import parse_response
 from codedjinn.providers.model import build_model
+from codedjinn.tools.registry import get_tools
+from codedjinn.prompts.system_prompt import get_system_prompt
 
 
-def get_agent(config: dict | None = None) -> Agent:
+def get_agent(
+    config: dict | None = None,
+    *,
+    include_tools: bool = False,
+    instructions_override: str | None = None,
+) -> Agent:
     """
     Build a minimal Agno agent using the stored configuration.
-
-    The agent is intentionally simple: it just wires the configured model
-    with a short instruction so we can validate connectivity early.
     """
     raw = config or load_raw_config()
 
@@ -32,21 +36,36 @@ def get_agent(config: dict | None = None) -> Agent:
         timeout=model_cfg.timeout,
     )
 
-    instructions = agent_settings.instructions or "You are Code Djinn. Reply with: Hello world."
+    instructions = instructions_override or agent_settings.instructions
+    if not instructions:
+        instructions = get_system_prompt()
+
+    tools = get_tools(raw) if include_tools else []
 
     return Agent(
         model=model,
         instructions=instructions,
         markdown=agent_settings.markdown,
         add_history_to_context=agent_settings.add_history_to_context,
+        tools=tools,
     )
 
 
-def run_and_parse(prompt: str = "hello", config: dict | None = None) -> dict[str, str]:
+def run_and_parse(
+    prompt: str = "hello",
+    config: dict | None = None,
+    *,
+    include_tools: bool = False,
+    instructions_override: str | None = None,
+) -> dict[str, str]:
     """
     Convenience helper to run a prompt and parse out minimal fields.
     """
-    agent = get_agent(config)
+    agent = get_agent(
+        config,
+        include_tools=include_tools,
+        instructions_override=instructions_override,
+    )
     raw = agent.run(prompt)
     return parse_response(raw)
 
