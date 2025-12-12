@@ -6,3 +6,6 @@ docstring_parser>=0.15
 
 # Agno framework (when available)
 # agno>=0.1.0  # Uncomment when Agno is published to PyPI
+
+# CLI framework
+typer>=0.12.0
