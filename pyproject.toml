@@ -21,4 +21,4 @@ dependencies = [
 ]
 
 [project.scripts]
-code-djinn = "codedjinn.main:code_djinn"
+code-djinn = "codedjinn.ui.cli:run"
