@@ -39,4 +39,10 @@ include = ["codedjinn*"]
 exclude = ["agno*", "tests*", "scripts*"]
 
 [project.scripts]
+<<<<<<< HEAD
 code-djinn = "codedjinn.main:code_djinn"
+||||||| parent of 4ff4108 (Update pyproject.toml for new entrypoint)
+code-djinn = "codedjinn.main:code_djinn"
+=======
+code-djinn = "codedjinn.ui.cli:run"
+>>>>>>> 4ff4108 (Update pyproject.toml for new entrypoint)
