@@ -43,6 +43,27 @@ def main(
     _print_result(parsed)
 
 
+@app.command()
+def config(
+    action: str = typer.Argument(
+        ...,
+        help="Configuration action: init, show, or edit",
+    ),
+) -> None:
+    """
+    Manage Code Djinn configuration.
+
+    Actions:
+        init - Interactive configuration wizard
+        show - Display current configuration
+        edit - Open config file in $EDITOR
+    """
+    # Lazy load config commands to avoid runtime overhead
+    from codedjinn.ui.config_commands import handle_config
+
+    handle_config(action)
+
+
 def run() -> None:
     """Entry point for console script mapping."""
     app()
