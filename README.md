@@ -127,7 +127,7 @@ That command searched for all Python files (.py extension) in the current direct
 ## Supported Providers & Models
 
 - **DeepInfra**: QwQ-32B, Qwen2.5-Coder-32B, Mistral-Small-24B
-- **MistralAI**: codestral-latest, mistral-small-latest  
+- **MistralAI**: codestral-latest, mistral-small-latest, devstral-medium-latest  
 - **Google**: gemini-2.0-flash
 
 ## Help
