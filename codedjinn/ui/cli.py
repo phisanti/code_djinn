@@ -1,6 +1,7 @@
 import typer
 
 from codedjinn.core.agent import run_and_parse
+from codedjinn.prompts.system_prompt import get_system_prompt
 
 app = typer.Typer(
     add_completion=False,
@@ -12,8 +13,6 @@ app = typer.Typer(
 def _print_result(result: dict[str, str]) -> None:
     """Minimal, structured output for now."""
     content = result.get("content", "")
-    model = result.get("model", "")
-    typer.echo(f"Model: {model}")
     typer.echo(f"Response:\n{content}")
 
 
@@ -25,20 +24,24 @@ def main(
         "-r",
         help="Prompt to send to the Code Djinn agent.",
     ),
+    steps: int = typer.Option(
+        3,
+        "--steps",
+        help="Maximum step budget (approx: tool calls + final answer).",
+        min=1,
+    ),
 ) -> None:
     """
     Generate a command/answer via the configured agent.
 
     This version enables shell tools so the agent can execute commands.
     """
-    instructions = (
-        "You are Code Djinn. Use the provided shell tools to run the user's "
-        "request in the current working directory. Return only the stdout."
-    )
+    instructions = get_system_prompt()
     parsed = run_and_parse(
         run,
         include_tools=True,
         instructions_override=instructions,
+        max_steps=steps,
     )
     _print_result(parsed)
 
