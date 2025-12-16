@@ -16,21 +16,23 @@ def normalize_max_steps(max_steps: int | None) -> int | None:
         value = int(max_steps)
     except (TypeError, ValueError):
         return None
-    return max(1, value)
+    # Allow 0 as a sentinel for "fast" execution mode.
+    return max(0, value)
 
 
 def _build_step_instruction(*, current_step: int, max_steps: int) -> str:
     if current_step >= max_steps:
         return (
             f"META: Final step ({max_steps}/{max_steps}). "
-            "Provide the best final command/answer now. "
+            "This is the last allowed tool call. "
+            "Use exec_shell to execute the best single shell command now. "
             "No deferral, no placeholders. If assumptions are needed, state them briefly and proceed."
         )
 
     remaining = max_steps - current_step
     return (
         f"META: Step {current_step}/{max_steps}. Remaining steps after this: {remaining}. "
-        "Finish as early as possible. Minimize the number of shell commands."
+        "Finish as early as possible. Minimize tool calls. Plan to use exec_shell on the final step."
     )
 
 
@@ -70,4 +72,3 @@ def advance_step_budget(session_state: dict, *, tool_calls: int = 1) -> None:
     used = int(step_budget.get("tool_calls_used") or 0)
     step_budget["tool_calls_used"] = used + max(1, int(tool_calls))
     refresh_step_context(session_state)
-

@@ -13,7 +13,7 @@ app = typer.Typer(
 def _print_result(result: dict[str, str]) -> None:
     """Minimal, structured output for now."""
     content = result.get("content", "")
-    typer.echo(f"Response:\n{content}")
+    typer.echo(content)
 
 
 @app.command()
@@ -27,8 +27,8 @@ def main(
     steps: int = typer.Option(
         3,
         "--steps",
-        help="Maximum step budget (approx: tool calls + final answer).",
-        min=1,
+        help="Maximum tool call budget. Use 0 for single-shot execution.",
+        min=0,
     ),
 ) -> None:
     """

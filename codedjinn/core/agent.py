@@ -65,17 +65,27 @@ def get_agent(
     if not instructions:
         instructions = get_system_prompt()
 
-    tools = get_tools(raw) if include_tools else []
-
     max_steps = normalize_max_steps(max_steps)
+
+    tools = []
+    if include_tools:
+        if max_steps == 0:
+            # Fast mode: only allow the final exec tool.
+            tools = get_tools(raw, include_shell=False, include_exec=True)
+        else:
+            tools = get_tools(raw, include_shell=True, include_exec=True)
+
     tool_call_limit = None
     tool_hooks = None
-    if include_tools and max_steps is not None:
-        # Treat "steps" as total turns including the final answer.
-        # This maps neatly to a tool call limit of (steps - 1).
-        tool_call_limit = max(0, max_steps - 1)
-        if session_state_for_hooks is not None:
-            tool_hooks = [_make_step_budget_tool_hook(session_state_for_hooks)]
+    if include_tools:
+        if max_steps == 0:
+            # Fast mode: a single tool call (exec_shell), then stop.
+            tool_call_limit = 1
+        elif max_steps is not None:
+            # Treat "steps" as maximum number of tool calls.
+            tool_call_limit = max_steps
+            if session_state_for_hooks is not None:
+                tool_hooks = [_make_step_budget_tool_hook(session_state_for_hooks)]
 
     return Agent(
         model=model,
@@ -100,7 +110,7 @@ def run_and_parse(
     Convenience helper to run a prompt and parse out minimal fields.
     """
     max_steps = normalize_max_steps(max_steps)
-    session_state = init_session_state_for_steps(max_steps) if max_steps is not None else None
+    session_state = init_session_state_for_steps(max_steps) if (max_steps is not None and max_steps > 0) else None
 
     agent = get_agent(
         config,
