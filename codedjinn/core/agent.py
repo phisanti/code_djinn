@@ -1,132 +1,57 @@
-from agno.agent import Agent
+"""Abstract agent interface for command generation."""
 
-from codedjinn.core.configs import (
-    AgentSettings,
-    ModelConfig,
-    get_agent_settings,
-    get_model_config,
-    load_raw_config,
-)
-from codedjinn.core.parser import parse_response
-from codedjinn.providers.model import build_model
-from codedjinn.tools.registry import get_tools
-from codedjinn.prompts.system_prompt import get_system_prompt
-from codedjinn.prompts.step_budget import (
-    advance_step_budget,
-    init_session_state_for_steps,
-    normalize_max_steps,
-)
+from abc import ABC, abstractmethod
+from typing import Optional
 
 
-def _make_step_budget_tool_hook(session_state: dict) -> object:
+class Agent(ABC):
     """
-    Tool hook that advances the step budget after each tool call.
+    Abstract base class for LLM-based command generation agents.
 
-    This relies on Agno including `session_state` in the system message between
-    tool calls when add_session_state_to_context=True.
+    Each provider (Mistral, Gemini, etc.) implements this interface
+    to provide consistent command generation capabilities.
     """
 
-    def hook(*, func=None, function=None, args=None, arguments=None, **_kwargs):
-        next_func = func or function
-        call_args = args if args is not None else (arguments or {})
-        result = next_func(**call_args)
-        advance_step_budget(session_state)
-        return result
+    @abstractmethod
+    def generate_command(self, query: str, context: dict) -> str:
+        """
+        Generate a single shell command from user's natural language query.
 
-    return hook
+        Args:
+            query: User's natural language request (e.g., "list git branches")
+            context: Execution context containing:
+                - cwd: Current working directory (Path)
+                - os_name: Operating system (str, e.g., "macOS", "Linux")
+                - shell: Shell type (str, e.g., "zsh", "bash")
 
+        Returns:
+            Shell command string ready for execution
 
-def get_agent(
-    config: dict | None = None,
-    *,
-    include_tools: bool = False,
-    instructions_override: str | None = None,
-    max_steps: int | None = None,
-    session_state_for_hooks: dict | None = None,
-) -> Agent:
-    """
-    Build a minimal Agno agent using the stored configuration.
-    """
-    raw = config or load_raw_config()
+        Raises:
+            Exception: If command generation fails (API error, malformed response, etc.)
 
-    model_cfg: ModelConfig = get_model_config(raw)
-    agent_settings: AgentSettings = get_agent_settings(raw)
+        Note:
+            This method should be fast (<500ms target) for single-command requests.
+        """
+        pass
 
-    model = build_model(
-        provider=model_cfg.provider,
-        model_id=model_cfg.model,
-        api_key=model_cfg.api_key,
-        temperature=model_cfg.temperature,
-        max_tokens=model_cfg.max_tokens,
-        timeout=model_cfg.timeout,
-    )
+    @abstractmethod
+    def generate_with_steps(self, query: str, context: dict, max_steps: int) -> list[str]:
+        """
+        Generate multiple commands for multi-step execution (agentic workflow).
 
-    instructions = instructions_override or agent_settings.instructions
-    if not instructions:
-        instructions = get_system_prompt()
+        NOTE: NOT IMPLEMENTED IN PHASE 1.
+        This is a placeholder for future multi-step agentic capabilities.
 
-    max_steps = normalize_max_steps(max_steps)
+        Args:
+            query: User's natural language request
+            context: Execution context (same as generate_command)
+            max_steps: Maximum number of steps/commands to generate
 
-    tools = []
-    if include_tools:
-        if max_steps == 0:
-            # Fast mode: only allow the final exec tool.
-            tools = get_tools(raw, include_shell=False, include_exec=True)
-        else:
-            tools = get_tools(raw, include_shell=True, include_exec=True)
+        Returns:
+            List of shell command strings to execute sequentially
 
-    tool_call_limit = None
-    tool_hooks = None
-    if include_tools:
-        if max_steps == 0:
-            # Fast mode: a single tool call (exec_shell), then stop.
-            tool_call_limit = 1
-        elif max_steps is not None:
-            # Treat "steps" as maximum number of tool calls.
-            tool_call_limit = max_steps
-            if session_state_for_hooks is not None:
-                tool_hooks = [_make_step_budget_tool_hook(session_state_for_hooks)]
-
-    return Agent(
-        model=model,
-        instructions=instructions,
-        markdown=agent_settings.markdown,
-        add_history_to_context=agent_settings.add_history_to_context,
-        tools=tools,
-        tool_call_limit=tool_call_limit,
-        tool_hooks=tool_hooks,
-    )
-
-
-def run_and_parse(
-    prompt: str = "hello",
-    config: dict | None = None,
-    *,
-    include_tools: bool = False,
-    instructions_override: str | None = None,
-    max_steps: int | None = None,
-) -> dict[str, str]:
-    """
-    Convenience helper to run a prompt and parse out minimal fields.
-    """
-    max_steps = normalize_max_steps(max_steps)
-    session_state = init_session_state_for_steps(max_steps) if (max_steps is not None and max_steps > 0) else None
-
-    agent = get_agent(
-        config,
-        include_tools=include_tools,
-        instructions_override=instructions_override,
-        max_steps=max_steps,
-        session_state_for_hooks=session_state,
-    )
-    raw = agent.run(
-        prompt,
-        session_state=session_state,
-        add_session_state_to_context=session_state is not None,
-    )
-    return parse_response(raw)
-
-
-if __name__ == "__main__":
-    # This will reach out to the configured provider. Use sparingly.
-    print(run_and_parse("hello"))
+        Raises:
+            NotImplementedError: Phase 1 does not support multi-step
+        """
+        pass

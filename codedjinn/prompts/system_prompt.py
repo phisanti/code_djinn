@@ -1,33 +1,68 @@
-"""
-System prompt for Code Djinn agents.
-Keep this concise; it is prepended to user requests before sending to the model.
-"""
-
-SYSTEM_PROMPT = """
-You are Code Djinn, a CLI agent that turns user requests into actions.
-Work in the user's current working directory and use the available tools
-(shell, exec_shell) to gather information and execute commands.
-Keep responses concise and focus on the stdout/results; avoid chatter.
-Ask for confirmation only if the request is clearly destructive.
-
-Optimization policy (speed is premium):
-- First: be correct.
-- Then: use the fewest shell commands possible (prefer 1 command over 2+).
-- Then: prefer lower-latency commands (avoid unnecessary extra checks).
-- Prefer single pipelines over multiple sequential commands.
-
-If <session_state> includes step budget context (e.g. step_context), treat it as a
-hard constraint and follow any per-step instruction it contains. Finish as early
-as possible; do not defer work to later steps.
-
-Execution policy:
-- Prefer returning results by calling exec_shell with a single command.
-- If step_context indicates the final step, you MUST call exec_shell now.
-
-Never print <session_state> or META instructions in your final output.
-"""
+"""Minimal system prompt builder for Mistral agent."""
 
 
+def build_system_prompt(os_name: str, shell: str, cwd: str) -> str:
+    """
+    Build minimal system prompt for single-command generation.
+
+    This prompt is intentionally minimal to reduce token count and
+    processing time. It provides just enough context for the model
+    to generate appropriate commands for the user's environment.
+
+    Args:
+        os_name: Operating system (e.g., "macOS", "Linux")
+        shell: Shell type (e.g., "zsh", "bash")
+        cwd: Current working directory
+
+    Returns:
+        System prompt string for Mistral API
+
+    Design Notes:
+        - Kept minimal for speed (fewer tokens = faster processing)
+        - No examples (model is pre-trained on command generation)
+        - No lengthy instructions (tool schema provides structure)
+        - Context-aware (includes OS, shell, directory)
+
+    TODO (Future Enhancements):
+        - Add common command examples for improved accuracy
+        - Add error handling instructions
+        - Add safety guidelines (warn on dangerous commands)
+        - Add multi-step planning instructions (Phase 2)
+    """
+    return f"""You are a {os_name} shell assistant using {shell}.
+Current directory: {cwd}
+
+Generate the appropriate shell command to fulfill the user's request.
+Use the execute_shell_command tool to provide the command.
+
+Be concise and generate only the necessary command."""
+
+
+# Future: Extended prompt for multi-step workflows
+def build_agentic_prompt(os_name: str, shell: str, cwd: str, max_steps: int) -> str:
+    """
+    Build system prompt for multi-step agentic workflows.
+
+    NOT IMPLEMENTED IN PHASE 1 - placeholder for future work.
+
+    This would include instructions for:
+    - Breaking down complex tasks into steps
+    - Observing command output before next step
+    - Error recovery strategies
+    - Step budget management
+    """
+    raise NotImplementedError("Multi-step prompts not implemented in Phase 1")
+
+
+# Legacy function for backward compatibility (if needed)
 def get_system_prompt() -> str:
-    """Return the default system prompt for Code Djinn agents."""
-    return SYSTEM_PROMPT.strip()
+    """
+    Return a basic system prompt without context.
+
+    NOTE: This is a legacy function. New code should use build_system_prompt()
+    with proper context parameters for better results.
+    """
+    return """You are a shell command assistant.
+Generate appropriate shell commands to fulfill user requests.
+Use the execute_shell_command tool to provide commands.
+Be concise and accurate."""

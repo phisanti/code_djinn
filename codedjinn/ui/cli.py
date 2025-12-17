@@ -1,19 +1,18 @@
+"""Main CLI entry point for djinn_mistral branch."""
+
+import sys
+from pathlib import Path
 import typer
 
-from codedjinn.core.agent import run_and_parse
-from codedjinn.prompts.system_prompt import get_system_prompt
+from codedjinn.core.configs import load_raw_config, get_model_config
+from codedjinn.providers.mistral import MistralAgent
+from codedjinn.tools.exec_shell import execute_command
 
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Code Djinn CLI (Agno-based).",
+    help="Code Djinn CLI (Native Mistral implementation).",
 )
-
-
-def _print_result(result: dict[str, str]) -> None:
-    """Minimal, structured output for now."""
-    content = result.get("content", "")
-    typer.echo(content)
 
 
 @app.command()
@@ -25,25 +24,90 @@ def main(
         help="Prompt to send to the Code Djinn agent.",
     ),
     steps: int = typer.Option(
-        3,
+        0,
         "--steps",
-        help="Maximum tool call budget. Use 0 for single-shot execution.",
+        help="Maximum tool call budget. Currently only 0 (single-shot) is supported.",
         min=0,
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show generated command before execution.",
     ),
 ) -> None:
     """
-    Generate a command/answer via the configured agent.
+    Generate and execute a command via the configured Mistral agent.
 
-    This version enables shell tools so the agent can execute commands.
+    This version uses native Mistral tool calling for maximum speed,
+    bypassing the Agno framework entirely.
     """
-    instructions = get_system_prompt()
-    parsed = run_and_parse(
-        run,
-        include_tools=True,
-        instructions_override=instructions,
-        max_steps=steps,
-    )
-    _print_result(parsed)
+    # Step 1: Load configuration (reuse existing 99%)
+    try:
+        raw_config = load_raw_config()
+        model_config = get_model_config(raw_config)
+    except Exception as e:
+        typer.echo(f"Error loading configuration: {e}", err=True)
+        typer.echo("Run 'code-djinn config init' to set up configuration", err=True)
+        raise typer.Exit(1)
+
+    # Step 2: Validate provider (warn, don't fail)
+    if model_config.provider != 'mistralai':
+        typer.echo(
+            f"WARNING: djinn_mistral branch currently only supports 'mistralai' provider",
+            err=True
+        )
+        typer.echo(f"Current provider: {model_config.provider}", err=True)
+        typer.echo(f"Attempting to use Mistral anyway...\n", err=True)
+
+    # Step 3: Validate steps parameter
+    if steps != 0:
+        typer.echo(
+            f"WARNING: Multi-step execution not implemented in Phase 1.",
+            err=True
+        )
+        typer.echo(f"Only --steps 0 is supported. Using single-shot mode.\n", err=True)
+
+    # Step 4: Create agent
+    try:
+        agent = MistralAgent(
+            api_key=model_config.api_key,
+            model=model_config.model
+        )
+    except Exception as e:
+        typer.echo(f"Error initializing Mistral agent: {e}", err=True)
+        raise typer.Exit(1)
+
+    # Step 5: Build execution context
+    os_name = raw_config.get('os', 'Linux')
+    shell = raw_config.get('shell', 'bash')
+    context = {
+        'cwd': Path.cwd(),
+        'os_name': os_name,
+        'shell': shell
+    }
+
+    # Step 6: Generate command
+    query = run
+    try:
+        command = agent.generate_command(query, context)
+    except Exception as e:
+        typer.echo(f"Error generating command: {e}", err=True)
+        raise typer.Exit(1)
+
+    # Step 7: Show command if verbose mode
+    if verbose:
+        typer.echo(f"→ {command}")
+        typer.echo()  # Blank line for readability
+
+    # Step 8: Execute command
+    # NOTE: No safety checks in Phase 1 - add in future
+    # TODO: Add confirmation prompt for dangerous commands
+    # TODO: Add command validation/sandboxing
+    exit_code = execute_command(command, cwd=context['cwd'])
+
+    # Step 9: Exit with command's exit code
+    raise typer.Exit(exit_code)
 
 
 @app.command()
