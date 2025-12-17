@@ -5,8 +5,11 @@ from pathlib import Path
 import typer
 
 from codedjinn.core.configs import load_raw_config, get_model_config
+from codedjinn.core.policy import check_and_confirm
+from codedjinn.core.session import Session  # NEW: Session management
 from codedjinn.providers.mistral import MistralAgent
 from codedjinn.tools.exec_shell import execute_command
+from codedjinn.tools.output_trimmer import trim_output  # NEW: Output trimming
 
 app = typer.Typer(
     add_completion=False,
@@ -35,12 +38,25 @@ def main(
         "-v",
         help="Show generated command before execution.",
     ),
+    no_confirm: bool = typer.Option(
+        False,
+        "--no-confirm",
+        help="Skip safety confirmation prompts (use with caution).",
+    ),
+    no_context: bool = typer.Option(  # NEW flag
+        False,
+        "--no-context",
+        help="Ignore previous command context (start fresh session).",
+    ),
 ) -> None:
     """
     Generate and execute a command via the configured Mistral agent.
 
     This version uses native Mistral tool calling for maximum speed,
     bypassing the Agno framework entirely.
+
+    NOW WITH CONTEXT: Remembers the previous command and its output,
+    enabling natural follow-up commands.
     """
     # Step 1: Load configuration (reuse existing 99%)
     try:
@@ -87,10 +103,29 @@ def main(
         'shell': shell
     }
 
-    # Step 6: Generate command
+    # Step 5B: Load session and get previous context (NEW)
+    session = Session(session_name="default")
+
+    if no_context:
+        # User wants fresh start - clear session
+        session.clear()
+        previous_context = None
+    else:
+        # Load previous context if available
+        previous_context = session.get_context_for_prompt()
+
+        if previous_context and verbose:
+            # Show user that we have context
+            typer.echo(f"[Using context from previous command: {previous_context['command']}]")
+
+    # Step 6: Generate command WITH CONTEXT (MODIFIED)
     query = run
     try:
-        command = agent.generate_command(query, context)
+        command = agent.generate_command(
+            query,
+            context,
+            previous_context=previous_context  # NEW: pass context
+        )
     except Exception as e:
         typer.echo(f"Error generating command: {e}", err=True)
         raise typer.Exit(1)
@@ -100,13 +135,24 @@ def main(
         typer.echo(f"→ {command}")
         typer.echo()  # Blank line for readability
 
-    # Step 8: Execute command
-    # NOTE: No safety checks in Phase 1 - add in future
-    # TODO: Add confirmation prompt for dangerous commands
-    # TODO: Add command validation/sandboxing
-    exit_code = execute_command(command, cwd=context['cwd'])
+    # Step 8: Safety check - confirm dangerous commands
+    if not no_confirm:
+        if not check_and_confirm(command):
+            typer.echo("Command execution cancelled by user.", err=True)
+            raise typer.Exit(1)
 
-    # Step 9: Exit with command's exit code
+    # Step 9: Execute command AND CAPTURE OUTPUT (MODIFIED)
+    # Note: Full output is streamed to user's terminal in real-time
+    exit_code, output = execute_command(command, cwd=context['cwd'])
+
+    # Step 10: Save to session for next command (NEW)
+    if not no_context:
+        # Trim output for model context (user sees full output above)
+        # This is "input trimming" - trimming what goes INTO the session/model context
+        trimmed_for_context = trim_output(output, max_lines=30, max_chars=2000)
+        session.save(command, trimmed_for_context, exit_code)
+
+    # Step 11: Exit with command's exit code
     raise typer.Exit(exit_code)
 
 
