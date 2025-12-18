@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from typing import Optional
 import typer
 
 from codedjinn.core.configs import load_raw_config, get_model_config
@@ -20,11 +21,16 @@ app = typer.Typer(
 
 @app.command()
 def main(
-    run: str = typer.Option(
-        ...,
+    run: Optional[str] = typer.Option(
+        None,
         "--run",
         "-r",
         help="Prompt to send to the Code Djinn agent.",
+    ),
+    ask: Optional[str] = typer.Option(
+        None,
+        "--ask",
+        help="Ask a question about the previous command output (no execution).",
     ),
     steps: int = typer.Option(
         0,
@@ -58,6 +64,14 @@ def main(
     NOW WITH CONTEXT: Remembers the previous command and its output,
     enabling natural follow-up commands.
     """
+    if run is not None and ask is not None:
+        typer.echo("Error: Use only one of --run or --ask.", err=True)
+        raise typer.Exit(2)
+
+    if run is None and ask is None:
+        typer.echo("Error: You must provide either --run or --ask.", err=True)
+        raise typer.Exit(2)
+
     # Step 1: Load configuration (reuse existing 99%)
     try:
         raw_config = load_raw_config()
@@ -117,6 +131,20 @@ def main(
         if previous_context and verbose:
             # Show user that we have context
             typer.echo(f"[Using context from previous command: {previous_context['command']}]")
+
+    if ask is not None:
+        try:
+            response = agent.analyze(
+                ask,
+                context,
+                previous_context=previous_context,
+            )
+        except Exception as e:
+            typer.echo(f"Error generating answer: {e}", err=True)
+            raise typer.Exit(1)
+
+        typer.echo(response)
+        return
 
     # Step 6: Generate command WITH CONTEXT (MODIFIED)
     query = run

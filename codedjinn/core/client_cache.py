@@ -10,15 +10,17 @@ Performance Impact:
     - Reduces latency and API server load
 """
 
-from typing import Dict, Optional
-from mistralai import Mistral
+from typing import Any, Dict, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mistralai import Mistral  # pragma: no cover
 
 
 # Global cache for Mistral clients
-_client_cache: Dict[str, Mistral] = {}
+_client_cache: Dict[str, Any] = {}
 
 
-def get_cached_client(api_key: str, model: str) -> Mistral:
+def get_cached_client(api_key: str, model: str) -> "Mistral":
     """
     Get or create a cached Mistral client instance.
 
@@ -49,6 +51,7 @@ def get_cached_client(api_key: str, model: str) -> Mistral:
 
     if cache_key not in _client_cache:
         # Cache miss - create new client
+        from mistralai import Mistral
         _client_cache[cache_key] = Mistral(api_key=api_key)
 
     return _client_cache[cache_key]

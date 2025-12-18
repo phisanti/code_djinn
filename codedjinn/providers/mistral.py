@@ -5,6 +5,7 @@ import json
 from codedjinn.core.agent import Agent
 from codedjinn.core.client_cache import get_cached_client
 from codedjinn.tools.registry import build_mistral_tool_schema
+from codedjinn.prompts.ask_prompt import build_ask_system_prompt
 from codedjinn.prompts.system_prompt import build_system_prompt
 
 
@@ -105,6 +106,34 @@ class MistralAgent(Agent):
 
         return arguments["command"]
 
+    def analyze(self, question: str, context: dict, previous_context: dict = None) -> str:
+        """
+        Analyze the previous command output and answer a question (ask mode).
+
+        This uses plain text generation (no tool calling) and does not execute
+        any commands. If previous_context is not provided, the model will
+        answer without command output context.
+        """
+        system_prompt = self._build_ask_system_prompt(context, previous_context)
+
+        response = self.client.chat.complete(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": question},
+            ],
+            temperature=0.3,
+            max_tokens=1500,
+        )
+
+        message = response.choices[0].message
+        content = getattr(message, "content", "")
+
+        if isinstance(content, list):
+            return "\n".join(str(part) for part in content).strip()
+
+        return ("" if content is None else str(content)).strip()
+
     def _get_tool_schema(self, context: dict) -> list[dict]:
         """
         Get Mistral tool schema from registry.
@@ -131,6 +160,20 @@ class MistralAgent(Agent):
             shell=context['shell'],
             cwd=str(context['cwd']),
             previous_context=previous_context  # NEW: pass through context
+        )
+
+    def _build_ask_system_prompt(self, context: dict, previous_context: dict = None) -> str:
+        """
+        Build ask-mode system prompt with optional previous command context.
+
+        Delegates to prompts/ask_prompt.py to keep provider code focused on
+        API interaction.
+        """
+        return build_ask_system_prompt(
+            os_name=context["os_name"],
+            shell=context["shell"],
+            cwd=str(context["cwd"]),
+            previous_context=previous_context,
         )
 
     def generate_with_steps(self, query: str, context: dict, max_steps: int) -> list[str]:
