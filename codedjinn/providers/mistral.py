@@ -7,6 +7,7 @@ from codedjinn.core.client_cache import get_cached_client
 from codedjinn.tools.registry import build_mistral_tool_schema
 from codedjinn.prompts.ask_prompt import build_ask_system_prompt
 from codedjinn.prompts.system_prompt import build_system_prompt
+from codedjinn.prompts.context_builder import get_context_detector
 
 
 class MistralAgent(Agent):
@@ -45,6 +46,9 @@ class MistralAgent(Agent):
             self.client = Mistral(api_key=api_key)
 
         self.model = model
+
+        # Get singleton context detector for smart context detection
+        self.context_detector = get_context_detector()
 
     def generate_command(self, query: str, context: dict, previous_context: dict = None) -> str:
         """
@@ -153,13 +157,20 @@ class MistralAgent(Agent):
         NOW WITH CONTEXT: If previous_context is provided, passes it through
         to the prompt builder so it can include command history in the prompt.
 
+        NOW WITH SMART CONTEXT: Automatically detects project context and
+        includes it in the prompt for better command generation.
+
         Delegates to prompts/system_prompt.py for easy iteration on prompts.
         """
+        # Detect smart context from current working directory
+        smart_ctx = self.context_detector.get_context(str(context['cwd']))
+
         return build_system_prompt(
             os_name=context['os_name'],
             shell=context['shell'],
             cwd=str(context['cwd']),
-            previous_context=previous_context  # NEW: pass through context
+            previous_context=previous_context,
+            smart_context=smart_ctx  # NEW: pass smart context
         )
 
     def _build_ask_system_prompt(self, context: dict, previous_context: dict = None) -> str:

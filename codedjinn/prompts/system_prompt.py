@@ -6,9 +6,11 @@ a cohesive XML-structured prompt that follows Anthropic's recommendations.
 """
 
 from typing import Optional
-from codedjinn.prompts.prompt_components import (
+from codedjinn.prompts.context_builder import (
+    SmartContext,
     build_system_info,
     build_environment,
+    build_project_context,
     build_command_context,
     build_instructions
 )
@@ -18,7 +20,8 @@ def build_system_prompt(
     os_name: str,
     shell: str,
     cwd: str,
-    previous_context: Optional[dict] = None
+    previous_context: Optional[dict] = None,
+    smart_context: Optional[SmartContext] = None
 ) -> str:
     """
     Build system prompt using XML-like tags (Anthropic recommended format).
@@ -28,8 +31,9 @@ def build_system_prompt(
 
     1. <system_info> - Role and task description
     2. <environment> - Current working directory
-    3. <command_context> - Previous command (if available)
-    4. <instructions> - Task guidelines
+    3. <project_context> - Smart context (if available)
+    4. <command_context> - Previous command (if available)
+    5. <instructions> - Task guidelines
 
     Args:
         os_name: Operating system name (e.g., "macOS", "Linux")
@@ -39,6 +43,7 @@ def build_system_prompt(
             - command: Previous shell command
             - output: Previous command's output (already trimmed)
             - exit_code: Previous command's exit code
+        smart_context: Optional SmartContext with project detection info
 
     Returns:
         Complete XML-structured system prompt string
@@ -57,11 +62,15 @@ def build_system_prompt(
     # Section 2: Environment (always present)
     sections.append(build_environment(cwd))
 
-    # Section 3: Command context (conditional - only if previous command exists)
+    # Section 3: Project context (conditional - only if smart context exists)
+    if smart_context is not None:
+        sections.append(build_project_context(smart_context))
+
+    # Section 4: Command context (conditional - only if previous command exists)
     if previous_context is not None:
         sections.append(build_command_context(previous_context))
 
-    # Section 4: Instructions (always present)
+    # Section 5: Instructions (always present)
     sections.append(build_instructions(os_name, shell))
 
     # Join sections with double newlines for readability

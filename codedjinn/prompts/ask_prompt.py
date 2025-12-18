@@ -7,7 +7,7 @@ calling and does not execute anything.
 
 from typing import Optional
 
-from codedjinn.prompts.prompt_components import build_environment, build_command_context
+from codedjinn.prompts.context_builder import build_environment, build_command_context
 
 
 def _build_ask_system_info(os_name: str, shell: str) -> str:

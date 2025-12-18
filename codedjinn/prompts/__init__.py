@@ -9,11 +9,15 @@ from codedjinn.prompts.system_prompt import (
     build_agentic_prompt,
     get_system_prompt,
 )
-from codedjinn.prompts.prompt_components import (
+from codedjinn.prompts.context_builder import (
     build_system_info,
     build_environment,
     build_command_context,
     build_instructions,
+    build_project_context,
+    SmartContext,
+    ContextDetector,
+    get_context_detector,
 )
 from codedjinn.prompts.parser import (
     escape_xml_content,
@@ -37,6 +41,11 @@ __all__ = [
     "build_environment",
     "build_command_context",
     "build_instructions",
+    "build_project_context",
+    # Smart context detection
+    "SmartContext",
+    "ContextDetector",
+    "get_context_detector",
     # XML utilities
     "escape_xml_content",
     "wrap_xml_tag",
