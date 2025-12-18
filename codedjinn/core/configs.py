@@ -1,5 +1,6 @@
 import configparser
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -79,7 +80,11 @@ def get_model_config(raw: Optional[Dict[str, str]] = None) -> ModelConfig:
     max_tokens = int(
         float(raw.get("agent_max_tokens", raw.get("max_tokens", 512) or 512))
     )
-    timeout = int(float(raw.get("agent_timeout", raw.get("timeout", 30) or 30)))
+    timeout_env = os.environ.get("CODEDJINN_AGENT_TIMEOUT_S") or os.environ.get("CODEDJINN_LLM_TIMEOUT_S")
+    if timeout_env is not None and str(timeout_env).strip() != "":
+        timeout = int(float(timeout_env))
+    else:
+        timeout = int(float(raw.get("agent_timeout", raw.get("timeout", 30) or 30)))
 
     return ModelConfig(
         provider=provider,

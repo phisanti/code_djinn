@@ -1,0 +1,11 @@
+# Core dependencies for Code Djinn with Agno architecture
+python-dotenv>=1.0.0
+prompt_toolkit>=3.0.0
+rich>=13.0.0
+docstring_parser>=0.15
+
+# Agno framework (when available)
+# agno>=0.1.0  # Uncomment when Agno is published to PyPI
+
+# CLI framework
+typer>=0.12.0
