@@ -1,195 +1,169 @@
-"""Main CLI entry point for djinn_mistral branch."""
+"""Main CLI entry point - clean subcommand architecture."""
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 import typer
 
 from codedjinn.core.configs import load_raw_config, get_model_config
 from codedjinn.core.policy import check_and_confirm
-from codedjinn.core.session import Session  # NEW: Session management
+from codedjinn.core.session import Session
 from codedjinn.providers.mistral import MistralAgent
 from codedjinn.tools.exec_shell import execute_command
-from codedjinn.tools.output_trimmer import trim_output  # NEW: Output trimming
+from codedjinn.tools.output_trimmer import trim_output
 
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Code Djinn CLI (Native Mistral implementation).",
+    help="Code Djinn - Your AI shell command assistant.",
 )
 
 
-@app.command()
-def main(
-    run: Optional[str] = typer.Option(
-        None,
-        "--run",
-        "-r",
-        help="Prompt to send to the Code Djinn agent.",
-    ),
-    ask: Optional[str] = typer.Option(
-        None,
-        "--ask",
-        help="Ask a question about the previous command output (no execution).",
-    ),
-    steps: int = typer.Option(
-        0,
-        "--steps",
-        help="Maximum tool call budget. Currently only 0 (single-shot) is supported.",
-        min=0,
-    ),
-    verbose: bool = typer.Option(
-        False,
-        "--verbose",
-        "-v",
-        help="Show generated command before execution.",
-    ),
-    no_confirm: bool = typer.Option(
-        False,
-        "--no-confirm",
-        help="Skip safety confirmation prompts (use with caution).",
-    ),
-    no_context: bool = typer.Option(  # NEW flag
-        False,
-        "--no-context",
-        help="Ignore previous command context (start fresh session).",
-    ),
-) -> None:
+# ============================================================================
+# Shared Setup - Performance critical: called on every invocation
+# ============================================================================
+
+def _setup_agent_and_context() -> Tuple:
     """
-    Generate and execute a command via the configured Mistral agent.
+    Load config and create agent. Exits on error.
 
-    This version uses native Mistral tool calling for maximum speed,
-    bypassing the Agno framework entirely.
+    Returns: (agent, context_dict)
 
-    NOW WITH CONTEXT: Remembers the previous command and its output,
-    enabling natural follow-up commands.
+    Performance: Config loading is cached, agent creation is fast.
+    Future agents: This is the single source of truth for agent setup.
     """
-    if run is not None and ask is not None:
-        typer.echo("Error: Use only one of --run or --ask.", err=True)
-        raise typer.Exit(2)
-
-    if run is None and ask is None:
-        typer.echo("Error: You must provide either --run or --ask.", err=True)
-        raise typer.Exit(2)
-
-    # Step 1: Load configuration (reuse existing 99%)
     try:
         raw_config = load_raw_config()
         model_config = get_model_config(raw_config)
     except Exception as e:
         typer.echo(f"Error loading configuration: {e}", err=True)
-        typer.echo("Run 'code-djinn config init' to set up configuration", err=True)
+        typer.echo("Run 'code-djinn settings init' to set up configuration", err=True)
         raise typer.Exit(1)
 
-    # Step 2: Validate provider (warn, don't fail)
+    # Warn if not using mistralai (but continue - user may be testing)
     if model_config.provider != 'mistralai':
         typer.echo(
-            f"WARNING: djinn_mistral branch currently only supports 'mistralai' provider",
+            f"WARNING: Currently only supports 'mistralai' provider (got: {model_config.provider})",
             err=True
         )
-        typer.echo(f"Current provider: {model_config.provider}", err=True)
-        typer.echo(f"Attempting to use Mistral anyway...\n", err=True)
 
-    # Step 3: Validate steps parameter
-    if steps != 0:
-        typer.echo(
-            f"WARNING: Multi-step execution not implemented in Phase 1.",
-            err=True
-        )
-        typer.echo(f"Only --steps 0 is supported. Using single-shot mode.\n", err=True)
-
-    # Step 4: Create agent
     try:
-        agent = MistralAgent(
-            api_key=model_config.api_key,
-            model=model_config.model
-        )
+        agent = MistralAgent(api_key=model_config.api_key, model=model_config.model)
     except Exception as e:
-        typer.echo(f"Error initializing Mistral agent: {e}", err=True)
+        typer.echo(f"Error initializing agent: {e}", err=True)
         raise typer.Exit(1)
 
-    # Step 5: Build execution context
-    os_name = raw_config.get('os', 'Linux')
-    shell = raw_config.get('shell', 'bash')
+    # Build execution context - minimal dict for performance
     context = {
         'cwd': Path.cwd(),
-        'os_name': os_name,
-        'shell': shell
+        'os_name': raw_config.get('os', 'Linux'),
+        'shell': raw_config.get('shell', 'bash')
     }
 
-    # Step 5B: Load session and get previous context (NEW)
+    return agent, context
+
+
+def _get_session_context(no_context: bool, verbose: bool) -> Tuple:
+    """
+    Load session and previous context.
+
+    Returns: (session, previous_context_dict_or_none)
+
+    Performance: Session loading is I/O bound, unavoidable.
+    Future agents: --no-context flag clears session, otherwise loads previous command.
+    """
     session = Session(session_name="default")
 
     if no_context:
-        # User wants fresh start - clear session
         session.clear()
-        previous_context = None
-    else:
-        # Load previous context if available
-        previous_context = session.get_context_for_prompt()
+        return session, None
 
-        if previous_context and verbose:
-            # Show user that we have context
-            typer.echo(f"[Using context from previous command: {previous_context['command']}]")
+    previous_context = session.get_context_for_prompt()
+    if previous_context and verbose:
+        typer.echo(f"[Using context from: {previous_context['command']}]")
 
-    if ask is not None:
-        try:
-            response = agent.analyze(
-                ask,
-                context,
-                previous_context=previous_context,
-            )
-        except Exception as e:
-            typer.echo(f"Error generating answer: {e}", err=True)
-            raise typer.Exit(1)
+    return session, previous_context
 
-        typer.echo(response)
-        return
 
-    # Step 6: Generate command WITH CONTEXT (MODIFIED)
-    query = run
+# ============================================================================
+# Commands - Each command is linear: setup → execute → handle result
+# ============================================================================
+
+@app.command()
+def ask(
+    query: str = typer.Argument(..., help="Question about previous command output"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
+    no_context: bool = typer.Option(False, "--no-context", help="Ignore previous context"),
+) -> None:
+    """
+    Ask a question about the previous command output (no execution).
+
+    Example: code-djinn ask "what files were modified?"
+    """
+    agent, context = _setup_agent_and_context()
+    _, previous_context = _get_session_context(no_context, verbose)
+
     try:
-        command = agent.generate_command(
-            query,
-            context,
-            previous_context=previous_context  # NEW: pass context
-        )
+        response = agent.analyze(query, context, previous_context=previous_context)
+        typer.echo(response)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def run(
+    query: str = typer.Argument(..., help="Prompt to generate and execute command"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show command before execution"),
+    no_confirm: bool = typer.Option(False, "--no-confirm", help="Skip safety confirmation"),
+    no_context: bool = typer.Option(False, "--no-context", help="Ignore previous context"),
+    steps: int = typer.Option(0, "--steps", min=0, help="Tool call budget (currently only 0 supported)"),
+) -> None:
+    """
+    Generate and execute a shell command.
+
+    Example: code-djinn run "find all python files modified today"
+
+    Performance: Single-shot LLM call, command execution streams output in real-time.
+    """
+    # Validate steps parameter (Phase 1: single-shot only)
+    if steps != 0:
+        typer.echo("WARNING: Only --steps 0 supported. Using single-shot mode.", err=True)
+
+    agent, context = _setup_agent_and_context()
+    session, previous_context = _get_session_context(no_context, verbose)
+
+    # Generate command (performance critical: LLM call)
+    try:
+        command = agent.generate_command(query, context, previous_context=previous_context)
     except Exception as e:
         typer.echo(f"Error generating command: {e}", err=True)
         raise typer.Exit(1)
 
-    # Step 7: Show command if verbose mode
+    # Show command if verbose
     if verbose:
-        typer.echo(f"→ {command}")
-        typer.echo()  # Blank line for readability
+        typer.echo(f"→ {command}\n")
 
-    # Step 8: Safety check - confirm dangerous commands
-    if not no_confirm:
-        if not check_and_confirm(command):
-            typer.echo("Command execution cancelled by user.", err=True)
-            raise typer.Exit(1)
+    # Safety check - user confirmation for dangerous commands
+    if not no_confirm and not check_and_confirm(command):
+        typer.echo("Cancelled by user.", err=True)
+        raise typer.Exit(1)
 
-    # Step 9: Execute command AND CAPTURE OUTPUT (MODIFIED)
-    # Note: Full output is streamed to user's terminal in real-time
+    # Execute and capture output (performance: streams to terminal in real-time)
     exit_code, output = execute_command(command, cwd=context['cwd'])
 
-    # Step 10: Save to session for next command (NEW)
+    # Save to session for next command (performance: trim output to avoid bloat)
     if not no_context:
-        # Trim output for model context (user sees full output above)
-        # This is "input trimming" - trimming what goes INTO the session/model context
-        trimmed_for_context = trim_output(output, max_lines=30, max_chars=2000)
-        session.save(command, trimmed_for_context, exit_code)
+        trimmed_output = trim_output(output, max_lines=30, max_chars=2000)
+        session.save(command, trimmed_output, exit_code)
 
-    # Step 11: Exit with command's exit code
+    # Exit with command's actual exit code (preserves shell semantics)
     raise typer.Exit(exit_code)
 
 
 @app.command()
-def config(
-    action: str = typer.Argument(
-        ...,
-        help="Configuration action: init, show, or edit",
-    ),
+def settings(
+    action: str = typer.Argument(..., help="Action: init, show, or edit"),
 ) -> None:
     """
     Manage Code Djinn configuration.
@@ -198,10 +172,10 @@ def config(
         init - Interactive configuration wizard
         show - Display current configuration
         edit - Open config file in $EDITOR
-    """
-    # Lazy load config commands to avoid runtime overhead
-    from codedjinn.ui.config_commands import handle_config
 
+    Performance: Lazy import config_commands to avoid startup overhead.
+    """
+    from codedjinn.ui.config_commands import handle_config
     handle_config(action)
 
 
