@@ -1,4 +1,4 @@
-from codedjinn.prompts.step_budget import normalize_max_steps
+from codedjinn.context.step_budget import normalize_max_steps
 
 
 def test_normalize_max_steps_allows_zero() -> None:

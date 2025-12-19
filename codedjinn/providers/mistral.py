@@ -5,9 +5,7 @@ import json
 from codedjinn.core.agent import Agent
 from codedjinn.core.client_cache import get_cached_client
 from codedjinn.tools.registry import build_mistral_tool_schema
-from codedjinn.prompts.ask_prompt import build_ask_system_prompt
-from codedjinn.prompts.system_prompt import build_system_prompt
-from codedjinn.prompts.context_builder import get_context_detector
+from codedjinn.context import build_prompt
 
 
 class MistralAgent(Agent):
@@ -46,9 +44,6 @@ class MistralAgent(Agent):
             self.client = Mistral(api_key=api_key)
 
         self.model = model
-
-        # Get singleton context detector for smart context detection
-        self.context_detector = get_context_detector()
 
     def generate_command(self, query: str, context: dict, previous_context: dict = None) -> str:
         """
@@ -152,39 +147,34 @@ class MistralAgent(Agent):
 
     def _build_system_prompt(self, context: dict, previous_context: dict = None) -> str:
         """
-        Build minimal system prompt with execution context.
+        Build system prompt for run mode with execution context.
 
-        NOW WITH CONTEXT: If previous_context is provided, passes it through
-        to the prompt builder so it can include command history in the prompt.
-
-        NOW WITH SMART CONTEXT: Automatically detects project context and
-        includes it in the prompt for better command generation.
-
-        Delegates to prompts/system_prompt.py for easy iteration on prompts.
+        Uses the new context API which automatically includes:
+        - System context (OS, shell, working directory)
+        - Shell history context (recent commands from user's shell)
+        - Local project context (git, virtualenv, Makefile, project type)
+        - Session context (previous Code Djinn command + output)
         """
-        # Detect smart context from current working directory
-        smart_ctx = self.context_detector.get_context(str(context['cwd']))
-
-        return build_system_prompt(
+        return build_prompt(
+            mode="run",
             os_name=context['os_name'],
             shell=context['shell'],
             cwd=str(context['cwd']),
-            previous_context=previous_context,
-            smart_context=smart_ctx  # NEW: pass smart context
+            session_context=previous_context,
         )
 
     def _build_ask_system_prompt(self, context: dict, previous_context: dict = None) -> str:
         """
         Build ask-mode system prompt with optional previous command context.
 
-        Delegates to prompts/ask_prompt.py to keep provider code focused on
-        API interaction.
+        Uses the new context API for consistent prompt building.
         """
-        return build_ask_system_prompt(
+        return build_prompt(
+            mode="ask",
             os_name=context["os_name"],
             shell=context["shell"],
             cwd=str(context["cwd"]),
-            previous_context=previous_context,
+            session_context=previous_context,
         )
 
     def generate_with_steps(self, query: str, context: dict, max_steps: int) -> list[str]:

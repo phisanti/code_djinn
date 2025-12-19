@@ -1,9 +1,11 @@
-"""Context builder for XML-structured prompts with smart project detection.
+"""Local project context detection with caching.
 
-This module combines:
-- Class-based detection (for caching and state management)
-- Functional builders (for XML generation)
-- Previous prompt component functions (migrated from prompt_components.py)
+Detects project-specific context from the filesystem:
+- Project type (python, node, rust, etc.)
+- Virtual environment status
+- Git repository information
+- Key configuration files
+- Makefile commands
 """
 
 from dataclasses import dataclass, field
@@ -11,14 +13,11 @@ from typing import Optional, Dict, List
 import os
 import subprocess
 import time
-from pathlib import Path
-
-from codedjinn.prompts.parser import escape_xml_content
 
 
 @dataclass
-class SmartContext:
-    """Detected project context."""
+class LocalProjectContext:
+    """Detected project context from local filesystem."""
     project_type: Optional[str] = None       # "python", "node", "rust", etc.
     virtual_env: Optional[str] = None        # "active: codedjinn_dev" or "inactive: venv"
     git_branch: Optional[str] = None         # "master", "feature/auth", etc.
@@ -27,8 +26,8 @@ class SmartContext:
     makefile_commands: List[Dict[str, str]] = field(default_factory=list)  # [{"cmd": "install", "desc": "..."}]
 
 
-class ContextDetector:
-    """Detects project context with caching."""
+class ProjectDetector:
+    """Detects project context with 30-second cache TTL."""
 
     # Key files to detect (from requirements)
     KEY_FILES = [
@@ -63,9 +62,9 @@ class ContextDetector:
             cache_ttl: Cache time-to-live in seconds
         """
         self.cache_ttl = cache_ttl
-        self._cache: Dict[str, tuple[SmartContext, float]] = {}
+        self._cache: Dict[str, tuple[LocalProjectContext, float]] = {}
 
-    def get_context(self, directory: str = ".") -> SmartContext:
+    def get_context(self, directory: str = ".") -> LocalProjectContext:
         """
         Main entry point: Get context with caching.
 
@@ -74,7 +73,7 @@ class ContextDetector:
         2. Check cache, return if valid (< cache_ttl seconds old)
         3. Otherwise, detect context by calling all _detect_* methods
         4. Store in cache with timestamp
-        5. Return SmartContext
+        5. Return LocalProjectContext
         """
         cache_key = self._get_cache_key(directory)
         now = time.time()
@@ -86,7 +85,7 @@ class ContextDetector:
                 return cached_context
 
         # Detect all context
-        context = SmartContext(
+        context = LocalProjectContext(
             project_type=self._detect_project_type(directory),
             virtual_env=self._detect_virtual_env(),
             git_branch=self._detect_git_branch(directory),
@@ -335,170 +334,14 @@ class ContextDetector:
 
 
 # ============================================================================
-# Builder Functions (Stateless XML Generation)
-# ============================================================================
-
-def build_system_info(os_name: str, shell: str) -> str:
-    """
-    Build <system_info> section with role and task description.
-
-    Args:
-        os_name: Operating system name (e.g., "macOS", "Linux")
-        shell: Shell type (e.g., "zsh", "bash")
-
-    Returns:
-        XML-formatted system info section
-    """
-    return f"""<system_info>
-You are a {os_name} shell assistant using {shell}.
-Generate appropriate shell commands using the execute_shell_command tool.
-</system_info>"""
-
-
-def build_environment(cwd: str) -> str:
-    """
-    Build <environment> XML section.
-
-    Args:
-        cwd: Current working directory path
-
-    Returns:
-        XML-formatted environment section
-    """
-    return f"""<environment>
-<working_directory>{cwd}</working_directory>
-</environment>"""
-
-
-def build_project_context(context: SmartContext) -> str:
-    """
-    Build <project_context> XML section from SmartContext.
-
-    Format (simplified XML, no attributes):
-    <project_context>
-      <type>python</type>
-      <key_files>Makefile, pyproject.toml</key_files>
-      <virtual_env>active: codedjinn_dev</virtual_env>
-      <git_repo>
-        <git_branch>master</git_branch>
-        <git_status>modified: 2 files</git_status>
-      </git_repo>
-      <makefile_commands>
-        <cmd>install: Install dependencies</cmd>
-        <cmd>test: Run tests</cmd>
-      </makefile_commands>
-    </project_context>
-
-    Note: Only include sections that have data (skip if None/empty)
-    """
-    parts = ["<project_context>"]
-
-    # Project type
-    if context.project_type:
-        parts.append(f"  <type>{context.project_type}</type>")
-
-    # Key files
-    if context.key_files:
-        files_str = ", ".join(context.key_files)
-        parts.append(f"  <key_files>{files_str}</key_files>")
-
-    # Virtual environment
-    if context.virtual_env:
-        parts.append(f"  <virtual_env>{context.virtual_env}</virtual_env>")
-
-    # Git repository info
-    if context.git_branch or context.git_status:
-        parts.append("  <git_repo>")
-        if context.git_branch:
-            parts.append(f"    <git_branch>{context.git_branch}</git_branch>")
-        if context.git_status:
-            parts.append(f"    <git_status>{context.git_status}</git_status>")
-        parts.append("  </git_repo>")
-
-    # Makefile commands
-    if context.makefile_commands:
-        parts.append("  <makefile_commands>")
-        for cmd_dict in context.makefile_commands:
-            cmd = cmd_dict['cmd']
-            desc = cmd_dict['desc']
-            if desc:
-                parts.append(f"    <cmd>{cmd}: {desc}</cmd>")
-            else:
-                parts.append(f"    <cmd>{cmd}</cmd>")
-        parts.append("  </makefile_commands>")
-
-    parts.append("</project_context>")
-
-    return "\n".join(parts)
-
-
-def build_command_context(context: dict) -> str:
-    """
-    Build <command_context> XML section.
-
-    Args:
-        context: Dictionary containing:
-            - command (str): The executed command
-            - exit_code (int): Exit code (0 = success)
-            - output (str): Command output (stdout + stderr)
-
-    Returns:
-        XML-formatted command context section
-
-    Note:
-        Output is automatically XML-escaped to handle special characters.
-    """
-    command = context['command']
-    exit_code = context['exit_code']
-    output = context['output']
-
-    # Escape output for safe XML embedding
-    escaped_output = escape_xml_content(output)
-
-    # Build previous command subsection
-    return f"""<command_context>
-<previous_command>
-  <executed>{command}</executed>
-  <exit_code>{exit_code}</exit_code>
-  <output>
-{escaped_output}
-  </output>
-</previous_command>
-
-<usage_note>
-User requests may reference this previous command or its output.
-Examples: "that file", "the error", "those branches", "the first one"
-</usage_note>
-</command_context>"""
-
-
-def build_instructions(os_name: str, shell: str) -> str:
-    """
-    Build <instructions> XML section.
-
-    Args:
-        os_name: Operating system name
-        shell: Shell type
-
-    Returns:
-        XML-formatted instructions section
-    """
-    return f"""<instructions>
-- Generate concise, appropriate commands for the user's request
-- Consider the working directory and any command context provided
-- Use proper syntax for {shell} on {os_name}
-</instructions>"""
-
-
-# ============================================================================
 # Singleton Pattern (Convenience)
 # ============================================================================
 
 # Global detector instance
-_detector: Optional[ContextDetector] = None
+_detector: Optional[ProjectDetector] = None
 
 
-def get_context_detector(cache_ttl: int = 30) -> ContextDetector:
+def get_project_detector(cache_ttl: int = 30) -> ProjectDetector:
     """
     Get or create singleton context detector.
 
@@ -508,9 +351,9 @@ def get_context_detector(cache_ttl: int = 30) -> ContextDetector:
         cache_ttl: Cache time-to-live in seconds (default: 30)
 
     Returns:
-        Singleton ContextDetector instance
+        Singleton ProjectDetector instance
     """
     global _detector
     if _detector is None:
-        _detector = ContextDetector(cache_ttl=cache_ttl)
+        _detector = ProjectDetector(cache_ttl=cache_ttl)
     return _detector
