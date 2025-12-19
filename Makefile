@@ -1,5 +1,5 @@
 # Makefile for CodeDjinn project
-.PHONY: help test test-verbose test-specific install install-dev clean build check-package lint format check-format check-imports release-check version-check prepare-release homebrew-update homebrew-sync homebrew-create-formula homebrew-release
+.PHONY: help test test-verbose test-specific install install-dev clean build check-package lint format check-format check-imports release-check version-check prepare-release homebrew-update homebrew-sync homebrew-create-formula homebrew-release clean-install
 
 # Default Python executable - prefer conda environment
 CONDA_ENV_PYTHON := /Users/santiago/miniconda3/envs/codedjinn_dev/bin/python
@@ -40,6 +40,15 @@ install-dev: ## Install package with development dependencies
 	@echo "📦 Installing CodeDjinn with development dependencies..."
 	$(PYTHON) -m pip install -e .
 	$(PYTHON) -m pip install pytest flake8 black isort build twine
+
+# Clean install removes previous installation then reinstalls via uv
+clean-install: ## Clean install via uv after removing old install
+	@echo "🧹 Running clean before forced uv install..."
+	$(MAKE) clean
+	@echo "🧪 Uninstalling any existing code-djinn package..."
+	@$(PYTHON) -m pip uninstall -y code-djinn >/dev/null 2>&1 || true
+	@echo "📦 Forcing fresh install via uv..."
+	uv pip install -e . --python $(CONDA_ENV_PYTHON) --force-reinstall
 
 # Cleaning targets
 clean: ## Clean build artifacts and cache files
