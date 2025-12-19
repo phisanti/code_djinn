@@ -6,161 +6,172 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/code-djinn.svg)](https://pypi.org/project/code-djinn/)
 [![Development Status](https://img.shields.io/badge/Development%20Status-4%20--%20Beta-yellow.svg)](https://pypi.org/search/?c=Development+Status+%3A%3A+4+-+Beta)
 
-Code Djinn is a lightning-fast CLI assistant that generates shell commands and provides an interactive chat experience. Code Djinn leverages fast and efficient LLM models like QwQ (Qwen), Codestral (Mistral), and Gemini Flash (Google) to provide quick responses to your coding queries. The focus on lightweight models ensures snappy performance and responsiveness, making it a practical tool for your daily coding tasks.
+Code Djinn is a lightning-fast CLI assistant that generates and executes shell commands using AI. Powered by Mistral AI, Code Djinn translates natural language requests into shell commands with safety checks and automatic context awareness. The tool remembers your previous commands, allowing natural follow-up queries without repetition.
 
-So why spend hours on obscure StackOverflow threads or try to remember arcane CLI commands? Let code_djinn handle the boring stuff so you can focus on building awesome projects! 🧞‍♂️
+Stop searching StackOverflow or memorizing arcane CLI syntax. Let Code Djinn handle the boring stuff so you can focus on building awesome projects! 🧞‍♂️
 
 # Installation
 
 Install Code Djinn from PyPI:
 
 ```bash
+# Using pip
 pip install code-djinn
+
+# Using uv (faster)
+uv pip install code-djinn
+
+# Using uv tool (isolated environment, recommended)
+uv tool install code-djinn
 ```
 
-Or from source via:
+Or from source:
 
 ```bash
-pip install git+https://github.com/phisanti/code_djinn.git
+git clone https://github.com/phisanti/code_djinn.git
+cd code_djinn
+uv pip install -e .
 ```
 
 # Usage
 
-To use Code Djinn, you need to initialize the configuration first. This is a one-time process that will save your preferences and settings. Here’s how you do it:
+First-time setup (initialize configuration):
 
 ```bash
-code_djinn --init
+code-djinn settings init
 ```
 
-This will prompt you to enter some information, such as:
+This interactive wizard will prompt you for:
 
-- Your OS family (e.g. Windows, MacOS, Linux). Code Djinn will detect it automatically.
-- Your shell (e.g. bash, zsh, fish). Code Djinn will detect it from your environment variables.
-- Your preferred LLM provider (DeepInfra, MistralAI, or Gemini)
-- Your API key for the selected provider
-- Optional: System preferences for customized command suggestions
+- Your OS family (auto-detected: Windows, MacOS, Linux)
+- Your shell (auto-detected: bash, zsh, fish, etc.)
+- Your preferred LLM provider (currently supports **MistralAI**)
+- Your Mistral API key ([get one here](https://console.mistral.ai/))
+- Model selection (mistral-small-latest, codestral-latest, etc.)
 
 ## Quick Start
 
-### Generate Commands
+### Generate and Execute Commands
 ```bash
-# Basic command generation
-code_djinn -a "list files by size"
-# Output: ls -lhS
+# Basic command execution with safety confirmation
+code-djinn run "list files by size"
+# → Generates: ls -lhS
+# → Asks for confirmation
+# → Executes and shows output
 
-# With explanation
-code_djinn -a -e "find large files"
-```
-
-### Execute Commands Safely
-```bash
-# Generate and run with confirmation (default behavior)
-code_djinn -r "show disk usage"
+# Show command before execution (verbose mode)
+code-djinn run "find large files" -v
 
 # Skip confirmation for safe commands
-code_djinn -r --no-confirm "list current directory"
+code-djinn run "show current date" --no-confirm
 ```
 
-### Interactive Chat Mode 🎉 NEW!
+### Ask Questions About Previous Output
 ```bash
-# Start interactive chat session
-code_djinn --chat
+# First, run a command
+code-djinn run "git log --oneline -n 10"
 
-# Chat with context and command execution
-[project-dir]> What files are in this directory?
-[project-dir]> Find all Python files larger than 1MB
-[project-dir]> exit
+# Then ask about its output (context-aware!)
+code-djinn ask "what was the last commit about?"
+
+# Start fresh (ignore previous context)
+code-djinn run "list python files" --no-context
+```
+
+### Configuration Management
+```bash
+# View current configuration
+code-djinn settings show
+
+# Reconfigure settings
+code-djinn settings init
+
+# Edit config file directly
+code-djinn settings edit
 ```
 
 ## Available Commands
 
 ```bash
-# Generate commands
-code_djinn -a "your request"           # Fast command generation
-code_djinn -a -e "your request"        # With explanation
-code_djinn -a -v "your request"        # Verbose LLM output
+# Generate and execute commands
+code-djinn run "your request"              # Generate and execute with confirmation
+code-djinn run "your request" -v           # Show command before execution
+code-djinn run "your request" --no-confirm # Skip safety confirmation
+code-djinn run "your request" --no-context # Ignore previous command context
 
-# Execute commands safely  
-code_djinn -r "your request"           # Generate and run with confirmation
-code_djinn -r --no-confirm "request"   # Skip confirmation for safe commands
+# Ask about previous output
+code-djinn ask "your question"             # Analyze previous command output
+code-djinn ask "your question" -v          # Verbose output
+code-djinn ask "your question" --no-context # Ignore previous context
 
-# Interactive chat mode
-code_djinn --chat                      # Start interactive chat session
-
-# Utilities
-code_djinn --init                      # Setup configuration
-code_djinn --list-models              # Show available LLM models
-code_djinn --clear-cache              # Clear performance cache
+# Configuration management
+code-djinn settings init                   # Interactive configuration wizard
+code-djinn settings show                   # Display current configuration
+code-djinn settings edit                   # Open config file in $EDITOR
 ```
 
-## Interactive Chat Mode Features
+## Key Features
 
-The new chat mode provides a conversational interface with advanced capabilities:
-
-- **Context-aware conversations**: Remembers your previous interactions
-- **Directory awareness**: Shows current directory in prompt
-- **Mixed responses**: Can provide both answers and executable commands
-- **Smart command detection**: Automatically identifies when you need a command vs. conversation
-- **Safe execution**: Commands require confirmation with clear prompts
-- **Session management**: Type `clear` to reset context, `exit` to quit
-
-```bash
-# Example chat session
-code_djinn --chat
-
-🧞 Code Djinn Chat Mode 
-Type 'exit' to quit, 'clear' to clear context
-
-[my-project]> How are you today?
-I'm doing great! Ready to help with your command-line tasks.
-
-[my-project]> Show me all Python files
-find . -name "*.py" -type f
-
-Execute? (enter to confirm or type n/no to cancel): 
-✓ Done
-
-[my-project]> What did that command do?
-That command searched for all Python files (.py extension) in the current directory and subdirectories.
-```
+- **Context Awareness**: Automatically remembers previous commands and their output
+- **Safety First**: Analyzes commands for potential risks and requires confirmation
+- **Real-time Streaming**: Command output streams directly to your terminal
+- **Fast Performance**: Optimized startup time with caching (99.6% improvement)
+- **Smart Parsing**: Handles both XML-structured and plain text LLM responses
+- **Session Management**: Persistent context across CLI invocations
 
 ## Supported Providers & Models
 
-- **DeepInfra**: QwQ-32B, Qwen2.5-Coder-32B, Mistral-Small-24B
-- **MistralAI**: codestral-latest, mistral-small-latest, devstral-medium-latest  
-- **Google**: gemini-2.0-flash
+**Currently Active:**
+- **MistralAI** (native implementation, no langchain dependency)
+  - `mistral-small-latest` - Fast, general-purpose model
+  - `codestral-latest` - Optimized for code generation
+  - `devstral-medium-latest` - Balanced performance/quality
+
+**Legacy (may be deprecated):**
+- DeepInfra (via langchain) - QwQ-32B, Qwen2.5-Coder-32B
+- Google Gemini (via langchain) - gemini-2.0-flash
 
 ## Help
 
 Use the `--help` flag to see all available options:
 
 ```bash
-❯ code_djinn --help 
-usage: code_djinn [-h] [-i] [-t [WISH]] [-e] [-v] [--list-models] [-r [WISH]]
-                  [--no-confirm] [--clear-cache] [--chat [SESSION_ID]]
+❯ code-djinn --help
 
-An AI CLI assistant
+ Usage: code-djinn [OPTIONS] COMMAND [ARGS]...
 
-options:
-  -h, --help            show this help message and exit
-  -i, --init            Initialize the configuration
-  -e, --explain         Also provide an explanation for the command
-  -v, --verbose         Verbose output from AI
-  --list-models         List available models for all providers
-  -r [WISH], --run [WISH]
-                        Generate and run a shell command (with confirmation by default)
-  --no-confirm          Skip confirmation for safe commands when using --run
-  --clear-cache         Clear LLM client cache for troubleshooting
-  --chat [SESSION_ID]   Start interactive chat mode (optionally resume session)
+ Code Djinn - Your AI shell command assistant.
+
+╭─ Options ────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────╮
+│ ask        Ask a question about the previous command output.             │
+│ run        Generate and execute a shell command.                         │
+│ settings   Manage Code Djinn configuration.                              │
+╰──────────────────────────────────────────────────────────────────────────╯
+
+# Get help for specific commands
+❯ code-djinn run --help
+❯ code-djinn ask --help
+❯ code-djinn settings --help
 ```
 
 ## Troubleshooting
 
 If you encounter issues:
 
-1. **Clear the cache**: `code_djinn --clear-cache`
-2. **Reinitialize configuration**: `code_djinn --init`
-3. **Check your API key**: Ensure it's valid and has proper permissions
+1. **Check configuration**: `code-djinn settings show`
+2. **Reinitialize configuration**: `code-djinn settings init`
+3. **Edit config manually**: `code-djinn settings edit`
+   - Config location: `~/.config/codedjinn/config.cfg`
+4. **Verify API key**: Ensure your Mistral API key is valid
+5. **Clear session context**: `code-djinn run "your command" --no-context`
+6. **Check Python cache**:
+   ```bash
+   find ~/.local/share/codedjinn -type f -name "*.json"
+   rm -rf ~/.local/share/codedjinn/sessions/  # Clear all sessions
+   ```
 
 For more help, [open an issue](https://github.com/phisanti/code_djinn/issues) on GitHub!
 

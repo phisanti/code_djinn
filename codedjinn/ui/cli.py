@@ -114,7 +114,8 @@ def ask(
 @app.command()
 def run(
     query: str = typer.Argument(..., help="Prompt to generate and execute command"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show command before execution"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
+    silent: bool = typer.Option(False, "--silent", help="Suppress echoing the generated command"),
     no_confirm: bool = typer.Option(False, "--no-confirm", help="Skip safety confirmation"),
     no_context: bool = typer.Option(False, "--no-context", help="Ignore previous context"),
     steps: int = typer.Option(0, "--steps", min=0, help="Tool call budget (currently only 0 supported)"),
@@ -140,8 +141,8 @@ def run(
         typer.echo(f"Error generating command: {e}", err=True)
         raise typer.Exit(1)
 
-    # Show command if verbose
-    if verbose:
+    # Echo command unless configured to stay silent
+    if not silent:
         typer.echo(f"→ {command}\n")
 
     # Safety check - user confirmation for dangerous commands
