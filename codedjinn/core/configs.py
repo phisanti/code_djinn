@@ -1,3 +1,9 @@
+"""Configuration management for Code Djinn.
+
+Loads user settings from ~/.config/codedjinn/config.cfg
+Provides ModelConfig (LLM settings) and AgentSettings (agent behavior)
+"""
+
 import configparser
 from dataclasses import dataclass
 import os

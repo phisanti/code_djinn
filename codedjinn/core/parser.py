@@ -1,3 +1,9 @@
+"""Response parser for LLM outputs.
+
+Extracts content and model information from agent responses
+Handles both dict and object formats flexibly
+"""
+
 from typing import Any, Dict
 
 

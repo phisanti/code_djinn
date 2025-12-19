@@ -1,3 +1,9 @@
+"""Legacy Gemini provider implementation.
+
+Factory function for building Gemini models via Agno
+Note: This is a legacy provider - Mistral is now the primary provider
+"""
+
 from agno.models.google import Gemini
 
 

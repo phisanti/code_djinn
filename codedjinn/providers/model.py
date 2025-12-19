@@ -1,3 +1,9 @@
+"""Model factory for multi-provider support.
+
+Builds provider-specific LLM model instances (Mistral, Gemini)
+Note: Legacy module - direct MistralAgent usage is now preferred
+"""
+
 from typing import Callable
 
 from codedjinn.providers.gemini import build_gemini_model
