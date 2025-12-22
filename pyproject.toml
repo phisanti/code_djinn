@@ -18,6 +18,9 @@ dependencies = [
     "rich>=13.0.0",
 ]
 
+[project.optional-dependencies]
+process-title = ["setproctitle>=1.3.0"]
+
 [project.scripts]
 code-djinn = "codedjinn.ui.cli:run"
 

@@ -1,4 +1,4 @@
-"""Main CLI entry point - clean subcommand architecture."""
+"""Main CLI entry point - clean subcommand architecture with daemon support."""
 
 import sys
 from pathlib import Path
@@ -17,6 +17,22 @@ app = typer.Typer(
     no_args_is_help=True,
     help="Code Djinn - Your AI shell command assistant.",
 )
+
+
+# ============================================================================
+# Daemon Mode Detection
+# ============================================================================
+
+def _should_use_daemon() -> bool:
+    """Check if we should use daemon mode."""
+    from codedjinn.daemon.client import is_daemon_enabled
+    return is_daemon_enabled()
+
+
+def _get_daemon_client():
+    """Get daemon client (lazy import for performance)."""
+    from codedjinn.daemon.client import DaemonClient
+    return DaemonClient()
 
 
 # ============================================================================
@@ -94,12 +110,29 @@ def ask(
     query: str = typer.Argument(..., help="Question about previous command output"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
     no_context: bool = typer.Option(False, "--no-context", help="Ignore previous context"),
+    no_daemon: bool = typer.Option(False, "--no-daemon", help="Force direct mode (no daemon)"),
 ) -> None:
     """
     Ask a question about the previous command output (no execution).
 
     Example: code-djinn ask "what files were modified?"
     """
+    # Try daemon mode first (faster if available)
+    if _should_use_daemon() and not no_daemon:
+        client = _get_daemon_client()
+        if client.ensure_daemon_running():
+            success, result = client.ask(
+                query=query,
+                cwd=str(Path.cwd()),
+                session_name="default",
+                no_context=no_context,
+            )
+            if success:
+                typer.echo(result.get("response", ""))
+                return
+            # Fall through to direct mode on error
+
+    # Direct mode (fallback)
     agent, context = _setup_agent_and_context()
     _, previous_context = _get_session_context(no_context, verbose)
 
@@ -118,6 +151,7 @@ def run(
     silent: bool = typer.Option(False, "--silent", help="Suppress echoing the generated command"),
     no_confirm: bool = typer.Option(False, "--no-confirm", help="Skip safety confirmation"),
     no_context: bool = typer.Option(False, "--no-context", help="Ignore previous context"),
+    no_daemon: bool = typer.Option(False, "--no-daemon", help="Force direct mode (no daemon)"),
     steps: int = typer.Option(0, "--steps", min=0, help="Tool call budget (currently only 0 supported)"),
 ) -> None:
     """
@@ -131,15 +165,34 @@ def run(
     if steps != 0:
         typer.echo("WARNING: Only --steps 0 supported. Using single-shot mode.", err=True)
 
-    agent, context = _setup_agent_and_context()
-    session, previous_context = _get_session_context(no_context, verbose)
+    cwd = Path.cwd()
+    command = None
 
-    # Generate command (performance critical: LLM call)
-    try:
-        command = agent.generate_command(query, context, previous_context=previous_context)
-    except Exception as e:
-        typer.echo(f"Error generating command: {e}", err=True)
-        raise typer.Exit(1)
+    # Try daemon mode first (faster if available)
+    if _should_use_daemon() and not no_daemon:
+        client = _get_daemon_client()
+        if client.ensure_daemon_running():
+            success, result = client.run(
+                query=query,
+                cwd=str(cwd),
+                session_name="default",
+                no_context=no_context,
+                verbose=verbose,
+            )
+            if success:
+                command = result.get("command")
+                # Use daemon for session later
+    
+    # Fallback to direct mode if daemon didn't work
+    if command is None:
+        agent, context = _setup_agent_and_context()
+        session, previous_context = _get_session_context(no_context, verbose)
+
+        try:
+            command = agent.generate_command(query, context, previous_context=previous_context)
+        except Exception as e:
+            typer.echo(f"Error generating command: {e}", err=True)
+            raise typer.Exit(1)
 
     # Echo command unless configured to stay silent
     if not silent:
@@ -151,12 +204,25 @@ def run(
         raise typer.Exit(1)
 
     # Execute and capture output (performance: streams to terminal in real-time)
-    exit_code, output = execute_command(command, cwd=context['cwd'])
+    exit_code, output = execute_command(command, cwd=cwd)
 
-    # Save to session for next command (performance: trim output to avoid bloat)
+    # Save to session for next command
     if not no_context:
         trimmed_output = trim_output(output, max_lines=30, max_chars=2000)
-        session.save(command, trimmed_output, exit_code)
+        
+        # Try to save via daemon if available
+        if _should_use_daemon() and not no_daemon:
+            client = _get_daemon_client()
+            client.save_session(
+                session_name="default",
+                command=command,
+                output=trimmed_output,
+                exit_code=exit_code,
+            )
+        else:
+            # Direct mode: save to disk
+            session = Session(session_name="default")
+            session.save(command, trimmed_output, exit_code)
 
     # Exit with command's actual exit code (preserves shell semantics)
     raise typer.Exit(exit_code)
@@ -178,6 +244,74 @@ def settings(
     """
     from codedjinn.ui.config_commands import handle_config
     handle_config(action)
+
+
+@app.command()
+def daemon(
+    action: str = typer.Argument(..., help="Action: start, stop, status, restart"),
+) -> None:
+    """
+    Manage the Code Djinn daemon.
+
+    Actions:
+        start   - Start daemon in background
+        stop    - Stop running daemon
+        status  - Show daemon status
+        restart - Restart daemon
+    """
+    from codedjinn.daemon.client import DaemonClient, get_pid_path
+    
+    client = DaemonClient()
+    
+    if action == "start":
+        if client.is_daemon_running():
+            typer.echo("Daemon is already running")
+        else:
+            typer.echo("Starting daemon...")
+            if client.ensure_daemon_running(auto_start=True):
+                typer.echo("Daemon started")
+            else:
+                typer.echo("Failed to start daemon", err=True)
+                raise typer.Exit(1)
+    
+    elif action == "stop":
+        if not client.is_daemon_running():
+            typer.echo("Daemon is not running")
+        else:
+            typer.echo("Stopping daemon...")
+            if client.shutdown():
+                typer.echo("Daemon stopped")
+            else:
+                typer.echo("Failed to stop daemon", err=True)
+                raise typer.Exit(1)
+    
+    elif action == "status":
+        stats = client.health()
+        if stats:
+            typer.echo("Daemon status: running")
+            typer.echo(f"  Uptime: {stats.get('uptime_seconds', 0):.0f}s")
+            typer.echo(f"  Cached contexts: {stats.get('cached_contexts', 0)}")
+            typer.echo(f"  Active sessions: {stats.get('active_sessions', 0)}")
+        else:
+            typer.echo("Daemon status: not running")
+    
+    elif action == "restart":
+        if client.is_daemon_running():
+            typer.echo("Stopping daemon...")
+            client.shutdown()
+            import time
+            time.sleep(0.5)
+        typer.echo("Starting daemon...")
+        if client.ensure_daemon_running(auto_start=True):
+            typer.echo("Daemon restarted")
+        else:
+            typer.echo("Failed to restart daemon", err=True)
+            raise typer.Exit(1)
+    
+    else:
+        typer.echo(f"Unknown action: {action}", err=True)
+        typer.echo("Valid actions: start, stop, status, restart", err=True)
+        raise typer.Exit(1)
 
 
 def run() -> None:

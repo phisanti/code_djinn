@@ -1,11 +1,15 @@
 """Mistral-based agent using native tool calling API."""
 
 import json
+from typing import Optional, TYPE_CHECKING
 
 from codedjinn.core.agent import Agent
 from codedjinn.core.client_cache import get_cached_client
 from codedjinn.tools.registry import build_mistral_tool_schema
 from codedjinn.context import build_prompt
+
+if TYPE_CHECKING:
+    from mistralai import Mistral
 
 
 class MistralAgent(Agent):
@@ -23,25 +27,38 @@ class MistralAgent(Agent):
     - Structured tool calling (no parsing)
     """
 
-    def __init__(self, api_key: str, model: str, use_cache: bool = True):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "mistral-small-latest",
+        use_cache: bool = True,
+        client: Optional["Mistral"] = None,
+    ):
         """
         Initialize Mistral agent.
 
         Args:
-            api_key: Mistral API key
+            api_key: Mistral API key (not needed if client is provided)
             model: Model name (e.g., "mistral-small-latest", "codestral-latest")
             use_cache: Use cached client for connection pooling (default: True)
+            client: Pre-initialized Mistral client (for daemon mode)
 
         Performance:
+            - client=<Mistral>: Uses pre-initialized client (daemon mode, fastest)
             - use_cache=True: Reuses HTTP connections (~50-100ms faster)
             - use_cache=False: Creates new client each time (testing only)
         """
-        if use_cache:
+        if client is not None:
+            # Daemon mode: use pre-initialized client (eliminates ~900ms import)
+            self.client = client
+        elif use_cache and api_key:
             self.client = get_cached_client(api_key, model)
-        else:
+        elif api_key:
             # Only for testing - creates new client without caching
             from mistralai import Mistral
             self.client = Mistral(api_key=api_key)
+        else:
+            raise ValueError("Either api_key or client must be provided")
 
         self.model = model
 
