@@ -60,6 +60,7 @@ Generate shell commands using the execute_shell_command tool.
 - Leverage shell history to understand the user's workflow
 - Use proper {ctx.system_context.shell} syntax for {ctx.system_context.os_name}
 - When user references "that file" or "the error", check session_context
+- Avoid full-screen TUI programs (htop, vim, less, etc.) - prefer text-output commands like ps, grep, cat
 </instructions>""")
 
     return "\n\n".join(sections)
