@@ -7,6 +7,7 @@ from codedjinn.core.agent import Agent
 from codedjinn.core.client_cache import get_cached_client
 from codedjinn.tools.registry import build_mistral_tool_schema, build_ask_tool_schema
 from codedjinn.tools.ask_executor import AskToolExecutor
+from codedjinn.tools.observe_executor import ObserveExecutor
 from codedjinn.context import (
     build_prompt,
     init_session_state_for_steps,
@@ -128,33 +129,212 @@ class MistralAgent(Agent):
 
         return arguments["command"]
 
-    def analyze(self, question: str, context: dict, previous_context: dict = None) -> str:
+    def analyze(
+        self,
+        question: str,
+        context: dict,
+        previous_context: dict = None,
+        max_steps: int = 1,
+        conversation_history: list = None
+    ) -> dict:
         """
         Analyze the previous command output and answer a question (ask mode).
 
-        This uses plain text generation (no tool calling) and does not execute
-        any commands. If previous_context is not provided, the model will
-        answer without command output context.
-        """
-        system_prompt = self._build_ask_system_prompt(context, previous_context)
+        Unified method supporting both single-shot and multi-step reasoning:
+        - max_steps=1 (default): Single tool call with immediate answer
+        - max_steps>1: Multi-step reasoning with observation accumulation
 
+        The model can:
+        1. Read files for context (read_file)
+        2. Execute safe observation commands (execute_observe_command)
+        3. Synthesize answers using finish_reasoning (multi-step only)
+        4. Use plain text generation without tools
+
+        Args:
+            question: User's question to answer
+            context: Execution context (cwd, os_name, shell)
+            previous_context: Optional dict with previous command/output
+            max_steps: Maximum reasoning steps (1=single-shot, >1=multi-step)
+            conversation_history: Optional list of previous exchanges
+
+        Returns:
+            Dict with 'answer' and 'tool_calls' for accountability tracking.
+            tool_calls is a list of executed tools with their arguments and results.
+
+        Example:
+            >>> # Single-shot mode (default)
+            >>> result = agent.analyze("what files exist?", context)
+            >>> print(result["answer"])
+            
+            >>> # Multi-step reasoning
+            >>> result = agent.analyze("why did the test fail?", context, max_steps=3)
+            >>> print(result["answer"])
+        """
+        file_executor = AskToolExecutor(cwd=str(context['cwd']))
+        observe_executor = ObserveExecutor(cwd=str(context['cwd']))
+        tool_calls_executed = []
+        observations = []
+        
+        # Initialize step budget tracking for multi-step
+        session_state = init_session_state_for_steps(max_steps) if max_steps > 1 else None
+        
+        for step_num in range(1, max_steps + 1):
+            # Build prompt based on mode
+            if max_steps == 1:
+                # Single-shot mode: simple prompt
+                system_prompt = self._build_ask_system_prompt(context, previous_context)
+                tool_choice = "any"  # Force tool use in single-shot
+            else:
+                # Multi-step mode: step-aware prompt with observations
+                refresh_step_context(session_state)
+                system_prompt = self._build_ask_step_prompt(
+                    question=question,
+                    step_number=step_num,
+                    max_steps=max_steps,
+                    prior_observations=observations,
+                    context=context,
+                    previous_context=previous_context,
+                    conversation_history=conversation_history
+                )
+                tool_choice = "auto"  # Allow model to choose in multi-step
+
+            response = self.client.chat.complete(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": question},
+                ],
+                tools=self._get_ask_tools(),
+                tool_choice=tool_choice,
+                temperature=0.3,
+                max_tokens=1500,
+            )
+
+            message = response.choices[0].message
+            
+            # Check if model used tools
+            if hasattr(message, 'tool_calls') and message.tool_calls:
+                for tool_call in message.tool_calls:
+                    tool_name = tool_call.function.name
+                    tool_args = json.loads(tool_call.function.arguments)
+                    
+                    if tool_name == "finish_reasoning":
+                        # Multi-step: model decided to provide final answer
+                        answer = tool_args.get("answer", "").strip()
+                        return {"answer": answer, "tool_calls": tool_calls_executed}
+                    
+                    elif tool_name == "read_file":
+                        path = tool_args.get("path", "")
+                        context_str = tool_args.get("context", "")
+                        file_content = file_executor.execute_read_file(path)
+                        
+                        # Track tool call for accountability
+                        tool_calls_executed.append({
+                            'tool': 'read_file',
+                            'path': path,
+                            'context': context_str,
+                            'output': file_content[:200] + "..." if len(file_content) > 200 else file_content
+                        })
+                        
+                        if max_steps == 1:
+                            # Single-shot: follow-up call for answer
+                            message = self._follow_up_with_tool_result(
+                                system_prompt, question, tool_call, file_content
+                            )
+                            break
+                        else:
+                            # Multi-step: record observation for next step
+                            observations.append({
+                                'step': step_num,
+                                'tool': 'read_file',
+                                'path': path,
+                                'context': context_str,
+                                'result': file_content
+                            })
+                    
+                    elif tool_name == "execute_observe_command":
+                        command = tool_args.get("command", "")
+                        context_str = tool_args.get("context", "")
+                        command_output = observe_executor.execute_observe_command(command)
+                        
+                        # Track tool call for accountability
+                        tool_calls_executed.append({
+                            'tool': 'execute_observe_command',
+                            'command': command,
+                            'context': context_str,
+                            'output': command_output[:200] + "..." if len(command_output) > 200 else command_output
+                        })
+                        
+                        if max_steps == 1:
+                            # Single-shot: follow-up call for answer
+                            message = self._follow_up_with_tool_result(
+                                system_prompt, question, tool_call, command_output
+                            )
+                            break
+                        else:
+                            # Multi-step: record observation for next step
+                            observations.append({
+                                'step': step_num,
+                                'tool': 'execute_observe_command',
+                                'command': command,
+                                'context': context_str,
+                                'result': command_output
+                            })
+                
+                # Single-shot mode exits after first tool execution
+                if max_steps == 1:
+                    break
+            else:
+                # No tool calls - model provided direct text response
+                break
+            
+            # Advance step budget for next iteration (multi-step only)
+            if session_state:
+                advance_step_budget(session_state)
+        
+        # Extract final answer
+        content = getattr(message, "content", "")
+        if isinstance(content, list):
+            answer = "\n".join(str(part) for part in content).strip()
+        else:
+            answer = ("" if content is None else str(content)).strip()
+        
+        # Multi-step fallback: synthesize if no answer yet
+        if max_steps > 1 and not answer and observations:
+            answer = self._synthesize_from_observations(question, observations)
+
+        return {"answer": answer, "tool_calls": tool_calls_executed}
+
+    def _follow_up_with_tool_result(
+        self,
+        system_prompt: str,
+        question: str,
+        tool_call,
+        tool_result: str
+    ):
+        """Make follow-up call with tool result to get model's answer."""
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [tool_call]
+            },
+            {
+                "role": "tool",
+                "content": tool_result,
+                "tool_call_id": tool_call.id
+            }
+        ]
+        
         response = self.client.chat.complete(
             model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": question},
-            ],
+            messages=messages,
             temperature=0.3,
             max_tokens=1500,
         )
-
-        message = response.choices[0].message
-        content = getattr(message, "content", "")
-
-        if isinstance(content, list):
-            return "\n".join(str(part) for part in content).strip()
-
-        return ("" if content is None else str(content)).strip()
+        return response.choices[0].message
 
     def analyze_with_steps(
         self,
@@ -165,123 +345,29 @@ class MistralAgent(Agent):
         conversation_history: list = None
     ) -> str:
         """
-        Multi-step reasoning for ask mode with file reading capabilities.
+        DEPRECATED: Use analyze(max_steps=N) instead.
         
-        This allows the model to:
-        1. Read files for context (via read_file tool)
-        2. Gather observations across multiple steps
-        3. Synthesize a final answer using finish_reasoning tool
-        
-        The model receives step-aware prompts with:
-        - Base context from build_ask_prompt() (system, shell history, project context)
-        - Prior observations from previous steps
-        - Step budget metadata (current step, remaining steps)
-        - Multi-step specific instructions
+        Multi-step reasoning for ask mode. This is a compatibility wrapper
+        that calls the unified analyze() method and extracts just the answer.
         
         Args:
             question: User's question to answer
             context: Execution context (cwd, os_name, shell)
             max_steps: Maximum number of reasoning steps (1-5, default 3)
             previous_context: Optional dict with previous command/output
-            conversation_history: Optional list of previous exchanges (Phase 4)
+            conversation_history: Optional list of previous exchanges
             
         Returns:
-            Final synthesized answer from the model
-            
-        Flow:
-            1. Initialize step budget tracking
-            2. For each step (1 to max_steps):
-               a. Build step-aware prompt with observations
-               b. Call Mistral with ask tools
-               c. Execute any read_file calls
-               d. Check for finish_reasoning and return early
-               e. Advance step budget
-            3. Synthesize answer from observations if no finish_reasoning
-            
-        Example:
-            >>> agent.analyze_with_steps(
-            ...     "why did the test fail?",
-            ...     context,
-            ...     max_steps=3,
-            ...     previous_context={"command": "pytest", "output": "FAIL..."}
-            ... )
+            Final synthesized answer string (for backward compatibility)
         """
-        observations = []
-        executor = AskToolExecutor(cwd=str(context['cwd']))
-        
-        # Initialize step budget tracking
-        session_state = init_session_state_for_steps(max_steps)
-        
-        for step_num in range(1, max_steps + 1):
-            # Refresh step context before building prompt
-            refresh_step_context(session_state)
-            step_context = session_state.get("step_context", {})
-            
-            # Build prompt for this step (uses existing infrastructure)
-            prompt = self._build_ask_step_prompt(
-                question=question,
-                step_number=step_num,
-                max_steps=max_steps,
-                prior_observations=observations,
-                context=context,
-                previous_context=previous_context,
-                conversation_history=conversation_history
-            )
-            
-            # Call Mistral with ask mode tools
-            response = self.client.chat.complete(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": question}
-                ],
-                tools=self._get_ask_tools(),
-                tool_choice="auto",
-                temperature=0.3,
-                max_tokens=1500,
-            )
-            
-            message = response.choices[0].message
-            
-            # Check if this is a text response (model chose not to use tools)
-            if not hasattr(message, 'tool_calls') or not message.tool_calls:
-                # Model provided direct text response (shouldn't happen with tool_choice="auto")
-                content = getattr(message, "content", "")
-                if isinstance(content, list):
-                    return "\n".join(str(part) for part in content).strip()
-                return ("" if content is None else str(content)).strip()
-            
-            # Process tool calls
-            for tool_call in message.tool_calls:
-                tool_name = tool_call.function.name
-                tool_args = json.loads(tool_call.function.arguments)
-                
-                if tool_name == "finish_reasoning":
-                    # Model decided to provide final answer (early termination)
-                    answer = tool_args.get("answer", "")
-                    return answer.strip()
-                
-                elif tool_name == "read_file":
-                    # Execute file read
-                    path = tool_args.get("path", "")
-                    context_str = tool_args.get("context", "")
-                    
-                    result = executor.execute_read_file(path)
-                    
-                    # Record observation for next step
-                    observations.append({
-                        'step': step_num,
-                        'tool': 'read_file',
-                        'path': path,
-                        'context': context_str,
-                        'result': result
-                    })
-            
-            # Advance step budget for next iteration
-            advance_step_budget(session_state)
-        
-        # If we've exhausted all steps without finish_reasoning, synthesize an answer
-        return self._synthesize_from_observations(question, observations)
+        result = self.analyze(
+            question=question,
+            context=context,
+            previous_context=previous_context,
+            max_steps=max_steps,
+            conversation_history=conversation_history
+        )
+        return result["answer"]
 
     def _get_ask_tools(self) -> list[dict]:
         """Get tool schema for ask mode."""
