@@ -41,7 +41,7 @@ class Session:
     multiple previous commands for better multi-step reasoning.
     """
 
-    MAX_HISTORY_EXCHANGES = 5  # Keep last 5 command-response pairs
+    MAX_HISTORY_EXCHANGES = 10  # Keep last 10 command-response pairs
 
     def __init__(self, session_name: str = "default"):
         """

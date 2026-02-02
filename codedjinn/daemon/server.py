@@ -302,28 +302,19 @@ class DaemonServer:
                 "shell": shell,
             }
             
-            # Analyze - route based on steps
-            if steps > 0:
-                response_text = agent.analyze_with_steps(
-                    question=query,
-                    context=context,
-                    max_steps=steps,
-                    previous_context=previous_context,
-                    conversation_history=conversation_history,
-                )
-                # analyze_with_steps returns a string
-                result = {"response": response_text}
-            else:
-                response_data = agent.analyze(
-                    question=query,
-                    context=context,
-                    previous_context=previous_context,
-                )
-                # analyze() now returns dict with answer and tool_calls
-                result = {
-                    "response": response_data.get("answer", ""),
-                    "tool_calls": response_data.get("tool_calls", [])
-                }
+            # Analyze - use unified analyze() method for both single-shot and multi-step
+            response_data = agent.analyze(
+                question=query,
+                context=context,
+                previous_context=previous_context,
+                max_steps=steps if steps > 0 else 1,
+                conversation_history=conversation_history if steps > 0 else None,
+            )
+            # analyze() returns dict with answer and tool_calls
+            result = {
+                "response": response_data.get("answer", ""),
+                "tool_calls": response_data.get("tool_calls", [])
+            }
             
             return serialize_response("ok", result=result)
             

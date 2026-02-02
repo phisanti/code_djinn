@@ -176,50 +176,40 @@ def ask(
             typer.echo(f"[Using conversation history: {len(conversation_history)} previous command(s)]")
 
     try:
-        # Route based on steps
-        if steps > 0:
-            # Multi-step reasoning mode
-            response = agent.analyze_with_steps(
-                query,
-                context,
-                max_steps=steps,
-                previous_context=previous_context,
-                conversation_history=conversation_history  # Phase 4: Conversation history
-            )
-            typer.echo(response)
-        else:
-            # Simple single-shot mode with tool tracking
-            result = agent.analyze(
-                query,
-                context,
-                previous_context=previous_context,
-            )
-            
-            # Display tool calls for accountability (always show)
-            tool_calls = result.get("tool_calls", [])
-            if tool_calls:
-                typer.echo("\n[Tools used]")
-                for tool_call in tool_calls:
-                    tool = tool_call.get("tool", "unknown")
-                    context_str = tool_call.get("context", "")
-                    if tool == "read_file":
-                        path = tool_call.get("path", "")
-                        output = tool_call.get("output", "")
-                        typer.echo(f"  📄 read_file: {path}")
-                        if context_str:
-                            typer.echo(f"     Reason: {context_str}")
-                        typer.echo(f"     Output: {output}")
-                    elif tool == "execute_observe_command":
-                        command = tool_call.get("command", "")
-                        output = tool_call.get("output", "")
-                        typer.echo(f"  🔍 execute_observe_command: {command}")
-                        if context_str:
-                            typer.echo(f"     Reason: {context_str}")
-                        typer.echo(f"     Output: {output}")
-                typer.echo()
-            
-            # Display the answer
-            typer.echo(result.get("answer", ""))
+        # Use unified analyze() method for both single-shot and multi-step
+        result = agent.analyze(
+            query,
+            context,
+            previous_context=previous_context,
+            max_steps=steps if steps > 0 else 1,
+            conversation_history=conversation_history if steps > 0 else None,
+        )
+
+        # Display tool calls for accountability (always show)
+        tool_calls = result.get("tool_calls", [])
+        if tool_calls:
+            typer.echo("\n[Tools used]")
+            for tool_call in tool_calls:
+                tool = tool_call.get("tool", "unknown")
+                context_str = tool_call.get("context", "")
+                if tool == "read_file":
+                    path = tool_call.get("path", "")
+                    output = tool_call.get("output", "")
+                    typer.echo(f"  📄 read_file: {path}")
+                    if context_str:
+                        typer.echo(f"     Reason: {context_str}")
+                    typer.echo(f"     Output: {output}")
+                elif tool == "execute_observe_command":
+                    command = tool_call.get("command", "")
+                    output = tool_call.get("output", "")
+                    typer.echo(f"  🔍 execute_observe_command: {command}")
+                    if context_str:
+                        typer.echo(f"     Reason: {context_str}")
+                    typer.echo(f"     Output: {output}")
+            typer.echo()
+
+        # Display the answer
+        typer.echo(result.get("answer", ""))
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
