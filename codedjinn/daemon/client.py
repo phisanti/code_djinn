@@ -189,6 +189,7 @@ class DaemonClient:
         cwd: Optional[str] = None,
         session_name: str = "default",
         no_context: bool = False,
+        steps: int = 0,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         Send 'ask' command to daemon.
@@ -198,6 +199,7 @@ class DaemonClient:
             cwd: Current working directory
             session_name: Session name
             no_context: Ignore previous context
+            steps: Number of reasoning steps (0=single-shot, 1-5=multi-step)
             
         Returns:
             (success, result_dict)
@@ -208,6 +210,7 @@ class DaemonClient:
             query=query,
             cwd=cwd or str(Path.cwd()),
             session_name=session_name,
+            steps=steps,
             options={
                 "no_context": no_context,
             },
@@ -274,6 +277,7 @@ class DaemonClient:
         query: str = "",
         cwd: str = "",
         session_name: str = "default",
+        steps: int = 0,
         options: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
@@ -297,6 +301,7 @@ class DaemonClient:
                 query=query,
                 cwd=cwd,
                 session_name=session_name,
+                steps=steps,
                 options=options,
             )
             sock.sendall(request_data)

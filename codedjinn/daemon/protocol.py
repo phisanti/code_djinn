@@ -34,6 +34,7 @@ def serialize_request(
     query: str = "",
     cwd: str = "",
     session_name: str = "default",
+    steps: int = 0,
     options: Optional[Dict[str, Any]] = None,
 ) -> bytes:
     """
@@ -44,6 +45,7 @@ def serialize_request(
         query: User query string
         cwd: Current working directory
         session_name: Session name for context
+        steps: Number of reasoning steps (for ask command)
         options: Additional options dict
         
     Returns:
@@ -54,6 +56,7 @@ def serialize_request(
         "query": query,
         "cwd": cwd,
         "session_name": session_name,
+        "steps": steps,
         "options": options or {},
     }
     return json.dumps(request).encode("utf-8")

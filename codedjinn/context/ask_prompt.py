@@ -44,7 +44,11 @@ Answer questions based on provided context. You do NOT execute commands.
     # 3. System context
     sections.append(ctx.system_xml)
 
-    # 4. Session context (critical for ask mode)
+    # 4. File context (user-added files)
+    if ctx.file_context and not ctx.file_context.is_empty():
+        sections.append(ctx.file_xml)
+
+    # 5. Session context (critical for ask mode)
     if ctx.session_context:
         sections.append(ctx.session_xml)
     else:
@@ -54,13 +58,14 @@ Answer questions based on provided context. You do NOT execute commands.
   <suggestion>Run a command first, then use ask mode to analyze its output.</suggestion>
 </session_context>""")
 
-    # 5. Instructions
+    # 6. Instructions
     sections.append("""<instructions>
 - Base your answer on the previous command output in session_context
 - If context is insufficient, say so explicitly
 - Respond in plain text or markdown (terminal-friendly format)
 - Be concise but thorough
 - If asked about "the error" or "that file", reference session_context
+- When files are in <file_context>, use them to provide informed analysis
 </instructions>""")
 
     return "\n\n".join(sections)

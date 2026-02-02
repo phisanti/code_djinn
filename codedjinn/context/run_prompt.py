@@ -49,18 +49,30 @@ Generate shell commands using the execute_shell_command tool.
     if ctx.localproject_context:
         sections.append(ctx.project_xml)
 
-    # 6. Session context (if available)
+    # 6. File context (user-added files)
+    if ctx.file_context and not ctx.file_context.is_empty():
+        sections.append(ctx.file_xml)
+
+    # 7. Session context (if available)
     if ctx.session_context:
         sections.append(ctx.session_xml)
 
-    # 7. Instructions
+    # 8. Instructions
     sections.append(f"""<instructions>
 - Generate concise, appropriate commands for the user's request
 - Consider working directory, project context, and command history
 - Leverage shell history to understand the user's workflow
 - Use proper {ctx.system_context.shell} syntax for {ctx.system_context.os_name}
 - When user references "that file" or "the error", check session_context
+- When files are in <file_context>, use them to understand code structure
 - Avoid full-screen TUI programs (htop, vim, less, etc.) - prefer text-output commands like ps, grep, cat
+
+Context management tips (for multi-step analysis):
+- If user needs deep file analysis, suggest: code-djinn context add <file> --duration 30m
+- Files in context persist across commands until expiration (default 10 min)
+- To view current context: code-djinn context list
+- To clear context: code-djinn context clear
+- For quick one-off file reads, prefer cat/head instead of adding to context
 </instructions>""")
 
     return "\n\n".join(sections)

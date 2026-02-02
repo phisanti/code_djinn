@@ -227,6 +227,7 @@ class DaemonServer:
                 os_name=os_name,
                 shell=shell,
                 session_context=previous_context,
+                session_name=session_name,
             )
             
             # Create agent with pre-initialized client
@@ -261,11 +262,12 @@ class DaemonServer:
     
     async def _handle_ask(self, request: Dict[str, Any]) -> bytes:
         """
-        Handle 'ask' command - analyze previous output.
+        Handle 'ask' command - analyze previous output with optional multi-step reasoning.
         """
         query = request.get("query", "")
         cwd = request.get("cwd", str(Path.cwd()))
         session_name = request.get("session_name", "default")
+        steps = request.get("steps", 0)
         options = request.get("options", {})
         
         if not query:
@@ -274,8 +276,12 @@ class DaemonServer:
         try:
             # Get session context
             previous_context = None
+            conversation_history = None
             if not options.get("no_context", False):
                 previous_context = self.state.get_session(session_name)
+                # Get conversation history for multi-step reasoning
+                if steps > 0:
+                    conversation_history = self.state.get_conversation_history(session_name)
             
             # Create agent
             from codedjinn.providers.mistral import MistralAgent
@@ -296,12 +302,21 @@ class DaemonServer:
                 "shell": shell,
             }
             
-            # Analyze
-            response_text = agent.analyze(
-                question=query,
-                context=context,
-                previous_context=previous_context,
-            )
+            # Analyze - route based on steps
+            if steps > 0:
+                response_text = agent.analyze_with_steps(
+                    question=query,
+                    context=context,
+                    max_steps=steps,
+                    previous_context=previous_context,
+                    conversation_history=conversation_history,
+                )
+            else:
+                response_text = agent.analyze(
+                    question=query,
+                    context=context,
+                    previous_context=previous_context,
+                )
             
             return serialize_response("ok", result={"response": response_text})
             

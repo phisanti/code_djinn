@@ -110,12 +110,19 @@ def ask(
     query: str = typer.Argument(..., help="Question about previous command output"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
     no_context: bool = typer.Option(False, "--no-context", help="Ignore previous context"),
+    steps: int = typer.Option(10, "--steps", min=1, max=10, help="Reasoning steps (1-10, default 10)"),
     no_daemon: bool = typer.Option(False, "--no-daemon", help="Force direct mode (no daemon)"),
 ) -> None:
     """
     Ask a question about the previous command output (no execution).
 
-    Example: code-djinn ask "what files were modified?"
+    Single-shot mode (default):
+        code-djinn ask "what files were modified?"
+
+    Multi-step reasoning (new):
+        code-djinn ask "explain the error" --steps 3 -v
+
+    Can read files from disk to provide better context (when using steps > 0).
     """
     # Try daemon mode first (faster if available)
     if _should_use_daemon() and not no_daemon:
@@ -126,6 +133,7 @@ def ask(
                 cwd=str(Path.cwd()),
                 session_name="default",
                 no_context=no_context,
+                steps=steps,
             )
             if success:
                 typer.echo(result.get("response", ""))
@@ -134,10 +142,25 @@ def ask(
 
     # Direct mode (fallback)
     agent, context = _setup_agent_and_context()
-    _, previous_context = _get_session_context(no_context, verbose)
+    session, previous_context = _get_session_context(no_context, verbose)
+
+    # Load conversation history for multi-step reasoning (Phase 4)
+    conversation_history = None
+    if not no_context and session and steps > 0:
+        conversation_history = session.get_conversation_history()
+        if conversation_history and verbose:
+            typer.echo(f"[Using conversation history: {len(conversation_history)} previous command(s)]")
 
     try:
-        response = agent.analyze(query, context, previous_context=previous_context)
+        # Always use multi-step reasoning (min 10 steps)
+        response = agent.analyze_with_steps(
+            query,
+            context,
+            max_steps=steps,
+            previous_context=previous_context,
+            conversation_history=conversation_history  # Phase 4: Conversation history
+        )
+        
         typer.echo(response)
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
@@ -153,6 +176,7 @@ def run(
     no_context: bool = typer.Option(False, "--no-context", help="Ignore previous context"),
     no_daemon: bool = typer.Option(False, "--no-daemon", help="Force direct mode (no daemon)"),
     steps: int = typer.Option(0, "--steps", min=0, help="Tool call budget (currently only 0 supported)"),
+    add_context: Optional[str] = typer.Option(None, "--add-context", help="Add files to context (comma-separated)"),
 ) -> None:
     """
     Generate and execute a shell command.
@@ -164,6 +188,18 @@ def run(
     # Validate steps parameter (Phase 1: single-shot only)
     if steps != 0:
         typer.echo("WARNING: Only --steps 0 supported. Using single-shot mode.", err=True)
+
+    # Handle --add-context flag (add files before running)
+    if add_context:
+        from codedjinn.context.sources.files import get_file_context_manager, parse_duration
+        files = [f.strip() for f in add_context.split(",")]
+        manager = get_file_context_manager()
+        result = manager.add_files(files, parse_duration("10m"))
+        if result['added'] and verbose:
+            typer.echo(f"[Added {len(result['added'])} file(s) to context]")
+        if result['errors']:
+            for err in result['errors']:
+                typer.echo(f"[Context error: {err}]", err=True)
 
     cwd = Path.cwd()
     command = None
@@ -312,6 +348,33 @@ def daemon(
         typer.echo(f"Unknown action: {action}", err=True)
         typer.echo("Valid actions: start, stop, status, restart", err=True)
         raise typer.Exit(1)
+
+
+@app.command()
+def context(
+    action: str = typer.Argument(..., help="Action: add, list, drop, clear"),
+    files: Optional[list[str]] = typer.Argument(None, help="Files for add/drop actions"),
+    duration: str = typer.Option("10m", "--duration", "-d", help="Duration for add (e.g., 10m, 1h, 1d)"),
+) -> None:
+    """
+    Manage file context for Code Djinn.
+
+    Actions:
+        add   - Add files to context
+        list  - Show files in context
+        drop  - Remove files from context
+        clear - Clear all file context
+
+    Examples:
+        code-djinn context add src/main.py --duration 30m
+        code-djinn context list
+        code-djinn context drop src/main.py
+        code-djinn context clear
+
+    Performance: Lazy import context_commands to avoid startup overhead.
+    """
+    from codedjinn.ui.context_commands import handle_context
+    handle_context(action, files=files, duration=duration)
 
 
 def run() -> None:
