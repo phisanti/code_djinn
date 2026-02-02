@@ -110,7 +110,7 @@ def ask(
     query: str = typer.Argument(..., help="Question about previous command output"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
     no_context: bool = typer.Option(False, "--no-context", help="Ignore previous context"),
-    steps: int = typer.Option(10, "--steps", min=1, max=10, help="Reasoning steps (1-10, default 10)"),
+    steps: int = typer.Option(0, "--steps", min=0, max=10, help="Reasoning steps (0-10, default 0=fast, use --steps 3 for multi-step)"),
     no_daemon: bool = typer.Option(False, "--no-daemon", help="Force direct mode (no daemon)"),
 ) -> None:
     """
@@ -136,6 +136,30 @@ def ask(
                 steps=steps,
             )
             if success:
+                # Display tool calls for accountability (always show)
+                tool_calls = result.get("tool_calls", [])
+                if tool_calls:
+                    typer.echo("\n[Tools used]")
+                    for tool_call in tool_calls:
+                        tool = tool_call.get("tool", "unknown")
+                        context = tool_call.get("context", "")
+                        if tool == "read_file":
+                            path = tool_call.get("path", "")
+                            output = tool_call.get("output", "")
+                            typer.echo(f"  📄 read_file: {path}")
+                            if context:
+                                typer.echo(f"     Reason: {context}")
+                            typer.echo(f"     Output: {output}")
+                        elif tool == "execute_observe_command":
+                            command = tool_call.get("command", "")
+                            output = tool_call.get("output", "")
+                            typer.echo(f"  🔍 execute_observe_command: {command}")
+                            if context:
+                                typer.echo(f"     Reason: {context}")
+                            typer.echo(f"     Output: {output}")
+                    typer.echo()
+                
+                # Display the answer
                 typer.echo(result.get("response", ""))
                 return
             # Fall through to direct mode on error
@@ -152,16 +176,50 @@ def ask(
             typer.echo(f"[Using conversation history: {len(conversation_history)} previous command(s)]")
 
     try:
-        # Always use multi-step reasoning (min 10 steps)
-        response = agent.analyze_with_steps(
-            query,
-            context,
-            max_steps=steps,
-            previous_context=previous_context,
-            conversation_history=conversation_history  # Phase 4: Conversation history
-        )
-        
-        typer.echo(response)
+        # Route based on steps
+        if steps > 0:
+            # Multi-step reasoning mode
+            response = agent.analyze_with_steps(
+                query,
+                context,
+                max_steps=steps,
+                previous_context=previous_context,
+                conversation_history=conversation_history  # Phase 4: Conversation history
+            )
+            typer.echo(response)
+        else:
+            # Simple single-shot mode with tool tracking
+            result = agent.analyze(
+                query,
+                context,
+                previous_context=previous_context,
+            )
+            
+            # Display tool calls for accountability (always show)
+            tool_calls = result.get("tool_calls", [])
+            if tool_calls:
+                typer.echo("\n[Tools used]")
+                for tool_call in tool_calls:
+                    tool = tool_call.get("tool", "unknown")
+                    context_str = tool_call.get("context", "")
+                    if tool == "read_file":
+                        path = tool_call.get("path", "")
+                        output = tool_call.get("output", "")
+                        typer.echo(f"  📄 read_file: {path}")
+                        if context_str:
+                            typer.echo(f"     Reason: {context_str}")
+                        typer.echo(f"     Output: {output}")
+                    elif tool == "execute_observe_command":
+                        command = tool_call.get("command", "")
+                        output = tool_call.get("output", "")
+                        typer.echo(f"  🔍 execute_observe_command: {command}")
+                        if context_str:
+                            typer.echo(f"     Reason: {context_str}")
+                        typer.echo(f"     Output: {output}")
+                typer.echo()
+            
+            # Display the answer
+            typer.echo(result.get("answer", ""))
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)

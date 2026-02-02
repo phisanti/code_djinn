@@ -63,17 +63,20 @@ def build_ask_tool_schema() -> list[dict]:
     investigation. This function constructs the tool schema that allows
     the model to:
     1. Read files for context (read_file)
-    2. Signal completion and provide final answer (finish_reasoning)
+    2. Execute safe observation commands (execute_observe_command)
+    3. Signal completion and provide final answer (finish_reasoning)
     
     Returns:
         List of tool definitions in Mistral's expected format.
-        Includes read_file and finish_reasoning tools.
+        Includes read_file, execute_observe_command, and finish_reasoning tools.
         
     Example:
         >>> schema = build_ask_tool_schema()
         >>> schema[0]['function']['name']
         'read_file'
         >>> schema[1]['function']['name']
+        'execute_observe_command'
+        >>> schema[2]['function']['name']
         'finish_reasoning'
     
     Note:
@@ -111,6 +114,39 @@ def build_ask_tool_schema() -> list[dict]:
                         }
                     },
                     "required": ["path"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "execute_observe_command",
+                "description": (
+                    "Execute safe read-only observation commands for gathering context. "
+                    "Allowed commands include: git log/diff/status, ls, cat, grep, find, diff, ps, df, du, etc. "
+                    "Use this to inspect system state, version control history, or file listings. "
+                    "No destructive commands allowed."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": (
+                                "Safe observation command to execute. "
+                                "Examples: 'git log --oneline -5', 'ls -la src/', 'grep -r \"pattern\" .' "
+                            )
+                        },
+                        "context": {
+                            "type": "string",
+                            "description": (
+                                "Why you're running this command - what context do you need? "
+                                "Example: 'to see recent changes in the repository'"
+                            ),
+                            "optional": True
+                        }
+                    },
+                    "required": ["command"]
                 }
             }
         },

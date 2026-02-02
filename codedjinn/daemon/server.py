@@ -311,14 +311,21 @@ class DaemonServer:
                     previous_context=previous_context,
                     conversation_history=conversation_history,
                 )
+                # analyze_with_steps returns a string
+                result = {"response": response_text}
             else:
-                response_text = agent.analyze(
+                response_data = agent.analyze(
                     question=query,
                     context=context,
                     previous_context=previous_context,
                 )
+                # analyze() now returns dict with answer and tool_calls
+                result = {
+                    "response": response_data.get("answer", ""),
+                    "tool_calls": response_data.get("tool_calls", [])
+                }
             
-            return serialize_response("ok", result={"response": response_text})
+            return serialize_response("ok", result=result)
             
         except Exception as e:
             logger.exception(f"Error in handle_ask: {e}")

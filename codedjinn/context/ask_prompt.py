@@ -1,8 +1,8 @@
 """Ask-mode system prompt builder for analyzing previous output.
 
 Ask mode is a lightweight analysis mode that answers a user question using
-the most recent command and its output as context. It does not use tool
-calling and does not execute anything.
+the most recent command and its output as context. It can read files for
+additional context but does not execute any commands.
 """
 
 from codedjinn.context.contextualiser import ContextualiserResult
@@ -12,8 +12,9 @@ def build_ask_prompt(ctx: ContextualiserResult) -> str:
     """
     Build system prompt for ask mode.
 
-    This mode does NOT use tool calling - pure text analysis.
-    Focus is on answering questions about previous command output.
+    This mode supports file reading (via read_file tool) to gather context,
+    but does not execute commands. Focus is on answering questions about
+    previous command output and code/files.
 
     Args:
         ctx: ContextualiserResult from contextualiser.contextualise()
@@ -27,6 +28,10 @@ def build_ask_prompt(ctx: ContextualiserResult) -> str:
         3. <session_context> - Previous command (critical for ask mode)
         4. <instructions> - How to analyze
 
+    Tools available:
+        - read_file: Read file contents for additional context
+        - Do NOT use execute_shell_command (not available in ask mode)
+
     Note: Ask mode typically doesn't need shell history or project context
           (but we could include them if useful in the future)
     """
@@ -35,7 +40,9 @@ def build_ask_prompt(ctx: ContextualiserResult) -> str:
     # 1. Role description
     sections.append(f"""<role>
 You are Code Djinn - a {ctx.system_context.os_name} command-line assistant and code analyst.
-Answer questions based on provided context. You do NOT execute commands.
+Answer questions by analyzing provided context, reading files, and running safe observation commands.
+You can read files using the read_file tool and run safe commands (git, ls, grep, etc) using execute_observe_command.
+You do NOT execute destructive commands.
 </role>""")
 
     # 2. Tool capabilities
@@ -61,11 +68,15 @@ Answer questions based on provided context. You do NOT execute commands.
     # 6. Instructions
     sections.append("""<instructions>
 - Base your answer on the previous command output in session_context
+- Use read_file tool to read relevant files when needed for better context
+- Use execute_observe_command for safe inspection commands (git log, ls, grep, etc)
+- Each tool call should have clear reasoning in the 'context' parameter for accountability
 - If context is insufficient, say so explicitly
 - Respond in plain text or markdown (terminal-friendly format)
 - Be concise but thorough
 - If asked about "the error" or "that file", reference session_context
 - When files are in <file_context>, use them to provide informed analysis
+- Do NOT attempt destructive commands - only safe observation and file reading allowed
 </instructions>""")
 
     return "\n\n".join(sections)
