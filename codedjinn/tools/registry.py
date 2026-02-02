@@ -55,11 +55,97 @@ def build_mistral_tool_schema(os_name: str, shell: str) -> list[dict]:
     }]
 
 
+def build_ask_tool_schema() -> list[dict]:
+    """
+    Build Mistral-compatible tool schema for ask mode (multi-step reasoning).
+    
+    Ask mode supports read-only operations to gather context during
+    investigation. This function constructs the tool schema that allows
+    the model to:
+    1. Read files for context (read_file)
+    2. Signal completion and provide final answer (finish_reasoning)
+    
+    Returns:
+        List of tool definitions in Mistral's expected format.
+        Includes read_file and finish_reasoning tools.
+        
+    Example:
+        >>> schema = build_ask_tool_schema()
+        >>> schema[0]['function']['name']
+        'read_file'
+        >>> schema[1]['function']['name']
+        'finish_reasoning'
+    
+    Note:
+        These tools are used exclusively in ask mode for multi-step
+        reasoning. Run mode uses different tools (execute_shell_command).
+    """
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "read_file",
+                "description": (
+                    "Read file contents to gather context for answering questions. "
+                    "Use this to understand code, configuration, or other files relevant to your analysis. "
+                    "Can read files in current directory or home directory (~/)."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": (
+                                "Path to file to read. "
+                                "Use relative paths (./file.py), home paths (~/Documents/file.txt), "
+                                "or absolute paths within cwd."
+                            )
+                        },
+                        "context": {
+                            "type": "string",
+                            "description": (
+                                "Why you're reading this file - what context are you gathering? "
+                                "Example: 'to understand database schema' or 'to see error handling'"
+                            ),
+                            "optional": True
+                        }
+                    },
+                    "required": ["path"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "finish_reasoning",
+                "description": (
+                    "Provide your final answer and complete the reasoning process. "
+                    "Use this when you have gathered enough information to answer the question. "
+                    "You can stop early if you've reached a conclusion before using all available steps."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "answer": {
+                            "type": "string",
+                            "description": (
+                                "Your final answer to the user's original question. "
+                                "Should be comprehensive and grounded in the evidence you gathered."
+                            )
+                        }
+                    },
+                    "required": ["answer"]
+                }
+            }
+        }
+    ]
+
+
 # Future extension point for additional tools
-# TODO: Add tools for multi-step workflows (Phase 2)
-# - read_file: Read file contents for context
-# - search_docs: Search documentation
-# - explain_error: Explain command errors
+# TODO: Add more ask mode tools in future phases
+# - search_files: Search for files matching pattern
+# - grep_files: Search file contents
+# - compare_files: Show differences between files
 def build_extended_tool_schema(os_name: str, shell: str, include_tools: list[str]) -> list[dict]:
     """
     Build extended tool schema with additional tools beyond shell execution.

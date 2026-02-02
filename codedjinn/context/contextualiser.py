@@ -16,6 +16,10 @@ from codedjinn.context.sources.shell import (
     SystemContext,
     ShellHistContext
 )
+from codedjinn.context.sources.files import (
+    get_file_context,
+    FileContext
+)
 from codedjinn.context.parser import escape_xml_content
 
 
@@ -33,13 +37,15 @@ class ContextualiserResult:
         shellhist_context: ShellHistContext,
         localproject_context: Optional[LocalProjectContext],
         session_context: Optional[Dict[str, Any]],
-        cwd: str
+        cwd: str,
+        file_context: Optional[FileContext] = None
     ):
         self.system_context = system_context
         self.shellhist_context = shellhist_context
         self.localproject_context = localproject_context
         self.session_context = session_context
         self.cwd = cwd
+        self.file_context = file_context
 
         # Pre-compute XML sections for performance (lazy)
         self._system_xml = None
@@ -47,6 +53,7 @@ class ContextualiserResult:
         self._project_xml = None
         self._session_xml = None
         self._capabilities_xml = None
+        self._file_xml = None
 
     @property
     def system_xml(self) -> str:
@@ -98,6 +105,16 @@ class ContextualiserResult:
             self._capabilities_xml = build_capabilities_xml()
         return self._capabilities_xml
 
+    @property
+    def file_xml(self) -> str:
+        """Lazy-build file context XML."""
+        if self._file_xml is None:
+            if self.file_context and not self.file_context.is_empty():
+                self._file_xml = build_file_context_xml(self.file_context)
+            else:
+                self._file_xml = ""
+        return self._file_xml
+
 
 def contextualise(
     os_name: str,
@@ -105,7 +122,9 @@ def contextualise(
     cwd: str,
     session_context: Optional[Dict[str, Any]] = None,
     include_shellhist: bool = True,
-    include_localproject: bool = True
+    include_localproject: bool = True,
+    include_files: bool = True,
+    file_context: Optional[FileContext] = None
 ) -> ContextualiserResult:
     """
     Main entry point - gather and assemble all context.
@@ -118,6 +137,8 @@ def contextualise(
             Expected keys: 'command', 'output', 'exit_code'
         include_shellhist: Include shell history (default: True)
         include_localproject: Include project detection (default: True)
+        include_files: Include user-added file context (default: True)
+        file_context: Pre-loaded file context (if None, will load from disk)
 
     Returns:
         ContextualiserResult with all assembled context
@@ -125,7 +146,8 @@ def contextualise(
     Performance:
         - Shell history: ~2ms (file read)
         - Project detection: ~0ms (cached after first call)
-        - Total overhead: ~2-3ms
+        - File context: ~5ms metadata load (content cached in daemon)
+        - Total overhead: ~5-10ms
     """
     # 1. System context (always included)
     system_ctx, shellhist_ctx = get_shell_context(
@@ -143,12 +165,23 @@ def contextualise(
     # 3. Session context (from previous Code Djinn command)
     # Just pass through - already in correct format
 
+    # 4. File context (user-added files)
+    file_ctx = None
+    if include_files:
+        if file_context is not None:
+            # Use pre-loaded file context (from daemon cache)
+            file_ctx = file_context
+        else:
+            # Load from disk (direct mode)
+            file_ctx = get_file_context()
+
     return ContextualiserResult(
         system_context=system_ctx,
         shellhist_context=shellhist_ctx,
         localproject_context=localproject_ctx,
         session_context=session_context,
-        cwd=cwd
+        cwd=cwd,
+        file_context=file_ctx
     )
 
 
@@ -274,9 +307,58 @@ def build_capabilities_xml() -> str:
 You are Code Djinn - a CLI tool with these commands:
 - code-djinn run "query": Generate and execute shell commands
 - code-djinn ask "query": Analyze previous command output (current mode in ask, not available in run)
+- code-djinn context add <files>: Add files to persistent context
+- code-djinn context list: Show files in context
+- code-djinn context drop <files>: Remove files from context
+- code-djinn context clear: Clear all file context
 - --no-context: Ignore previous command context
 - --no-confirm: Skip safety confirmation (run mode only)
+- --add-context <files>: Add files to context with this command
 
 Workflow: Each command captures output → next command can reference it via session_context.
-To access file contents: Use "code-djinn run 'cat filename'" to read files into session context.
+Files in <file_context> are user-added and persist until expiration.
 </tool_capabilities>"""
+
+
+def build_file_context_xml(file_ctx: FileContext) -> str:
+    """
+    Build <file_context> section for user-added files.
+
+    Format:
+    <file_context>
+      <!-- User-added files: N files, M tokens -->
+      <file path="/path/to/file" display="relative/path" size="1234">
+        <![CDATA[
+        file content here
+        ]]>
+      </file>
+    </file_context>
+    """
+    if file_ctx.is_empty():
+        return ""
+
+    parts = ["<file_context>"]
+    parts.append(f"  <!-- User-added files: {len(file_ctx.files)} file(s), "
+                 f"~{file_ctx.total_tokens:,} tokens -->")
+
+    for file_entry in file_ctx.files:
+        # File header with metadata
+        parts.append(f'  <file path="{file_entry.path}" '
+                     f'display="{file_entry.display_path}" '
+                     f'size="{file_entry.size_bytes}">')
+
+        # Content in CDATA to handle special characters
+        if file_entry.content:
+            # Split CDATA end sequence if present in content
+            safe_content = file_entry.content.replace(']]>', ']]]]><![CDATA[>')
+            parts.append("    <![CDATA[")
+            parts.append(safe_content)
+            parts.append("    ]]>")
+        else:
+            parts.append("    <!-- Content not loaded -->")
+
+        parts.append("  </file>")
+
+    parts.append("</file_context>")
+
+    return "\n".join(parts)
