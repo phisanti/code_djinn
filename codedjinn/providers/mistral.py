@@ -312,7 +312,12 @@ class MistralAgent(Agent):
         tool_call,
         tool_result: str
     ):
-        """Make follow-up call with tool result to get model's answer."""
+        """Make follow-up call with tool result to get model's answer.
+
+        NOTE: In single-shot mode, we add an explicit user prompt asking for
+        an answer to force the model to generate a text response with the
+        information it already has, rather than making additional tool calls.
+        """
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question},
@@ -325,9 +330,13 @@ class MistralAgent(Agent):
                 "role": "tool",
                 "content": tool_result,
                 "tool_call_id": tool_call.id
+            },
+            {
+                "role": "user",
+                "content": "Based on the output above, please provide your answer to my question. Do not make any additional tool calls."
             }
         ]
-        
+
         response = self.client.chat.complete(
             model=self.model,
             messages=messages,
