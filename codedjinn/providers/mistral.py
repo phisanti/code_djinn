@@ -14,6 +14,7 @@ from codedjinn.context import (
     advance_step_budget,
     refresh_step_context,
 )
+from codedjinn.context.parser import escape_xml_content
 
 if TYPE_CHECKING:
     from mistralai import Mistral
@@ -272,7 +273,6 @@ class MistralAgent(Agent):
             question=question,
             step_number=1,
             max_steps=max_steps,
-            prior_observations=[],  # Empty for first step
             context=context,
             previous_context=previous_context,
             conversation_history=conversation_history
@@ -357,15 +357,16 @@ class MistralAgent(Agent):
                     ]
                 })
 
-                # Process each tool call
+                # Process each tool call (defer finish_reasoning to the end)
+                finish_call = None
                 for tool_call in assistant_message.tool_calls:
                     tool_name = tool_call.function.name
                     tool_args = json.loads(tool_call.function.arguments)
 
                     if tool_name == "finish_reasoning":
-                        # Model is ready to provide final answer
-                        answer = tool_args.get("answer", "").strip()
-                        return {"answer": answer, "tool_calls": tool_calls_executed}
+                        # Defer processing until after other tools
+                        finish_call = tool_args
+                        continue
 
                     elif tool_name == "read_file":
                         path = tool_args.get("path", "")
@@ -406,6 +407,11 @@ class MistralAgent(Agent):
                             "content": command_output,
                             "tool_call_id": tool_call.id
                         })
+
+                # Process finish_reasoning if it was called (after executing other tools)
+                if finish_call:
+                    answer = finish_call.get("answer", "").strip()
+                    return {"answer": answer, "tool_calls": tool_calls_executed}
 
             else:
                 # No tool calls - model provided direct text response
@@ -579,7 +585,6 @@ Please provide your answer based on this evidence."""
         question: str,
         step_number: int,
         max_steps: int,
-        prior_observations: list,
         context: dict,
         previous_context: dict = None,
         conversation_history: list = None
@@ -593,9 +598,8 @@ Please provide your answer based on this evidence."""
 
         Args:
             question: The original question
-            step_number: Current step (used for initial observations check)
+            step_number: Current step (unused, kept for compatibility)
             max_steps: Total available steps
-            prior_observations: Not used in new implementation (context in messages)
             context: Execution context (cwd, os_name, shell)
             previous_context: Optional previous command context
             conversation_history: Optional conversation history
@@ -664,14 +668,14 @@ Progress tracking: Step context will be provided as the conversation progresses
             output = exchange.get('output', '')
             exit_code = exchange.get('exit_code', 0)
 
-            # Escape XML special characters
-            command = command.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            output = output.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            # Escape XML special characters using utility function
+            safe_command = escape_xml_content(command)
+            safe_output = escape_xml_content(output)
 
             lines.append(f"  <exchange number=\"{i}\">")
-            lines.append(f"    <command>{command}</command>")
+            lines.append(f"    <command>{safe_command}</command>")
             lines.append(f"    <exit_code>{exit_code}</exit_code>")
-            lines.append(f"    <output>{output}</output>")
+            lines.append(f"    <output>{safe_output}</output>")
             lines.append(f"  </exchange>")
 
         lines.append("</conversation_history>")
