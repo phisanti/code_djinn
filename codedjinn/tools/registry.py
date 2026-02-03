@@ -123,8 +123,14 @@ def build_ask_tool_schema() -> list[dict]:
                 "name": "execute_observe_command",
                 "description": (
                     "Execute safe read-only observation commands for gathering context. "
-                    "Allowed commands include: git log/diff/status, ls, cat, grep, find, diff, ps, df, du, etc. "
-                    "Use this to inspect system state, version control history, or file listings. "
+                    "Allowed commands include: "
+                    "git (log/diff/status), ls, cat, grep, find, diff, "
+                    "ps (with flags like 'aux', '-m', '-eo'), top (batch mode: -l/-b/-n), "
+                    "df, du, free, vm_stat, and other system inspection tools. "
+                    "Use this to inspect processes, memory usage, system state, version control history, or file listings. "
+                    "Examples: "
+                    "macOS: 'ps aux -m | head -10' (sorted by memory), 'top -l 1 | head -20'; "
+                    "Linux: 'ps aux --sort=-%mem | head -10', 'top -b -n 1 | head -20', 'free -h'. "
                     "No destructive commands allowed."
                 ),
                 "parameters": {

@@ -3,7 +3,17 @@
 Allows the ask agent to run read-only observation commands like:
 - git: git log, git diff, git status, git show, git branch
 - file inspection: ls, cat, grep, head, tail, find, file
-- system info: ps, top, du, df, uname, date, wc
+- process observation: ps (with flags), top (batch mode)
+- system info: df, du, free, vm_stat, uname, date, wc
+- text processing: sed, awk, cut, sort, uniq
+
+Enhanced for process/memory queries:
+- ps aux --sort=-%mem | head -10  (top memory consumers)
+- ps -eo pid,ppid,cmd,%mem,%cpu --sort=-%mem  (custom format)
+- top -l 1 | head -20  (macOS batch mode)
+- top -b -n 1 | head -20  (Linux batch mode)
+- free -h  (Linux memory info)
+- vm_stat  (macOS memory info)
 """
 
 import re
@@ -29,23 +39,35 @@ class ObserveExecutor:
     SAFE_COMMANDS = [
         # Git commands (read-only)
         r'^git\s+(log|diff|status|show|branch|tag|remote|config|blame)',
-        
+
         # File inspection
         r'^(ls|cat|grep|head|tail|find|file|wc|od)\s+',
-        r'^(ls|pwd|whoami|date|uname|df|du|ps|top)\s*$',
-        
+        r'^(ls|pwd|whoami|date|uname)\s*$',
+
+        # Process observation (enhanced for memory/CPU queries)
+        r'^ps\s+',  # Allow ps with any flags (aux, -eo, etc)
+        r'^ps\s*$',  # Also allow bare ps
+        r'^top\s+-[bln]\s+',  # Batch mode: top -b, top -l, top -n (Linux/macOS)
+
+        # Memory and system info
+        r'^(df|du)\s+',  # Disk usage with args
+        r'^(df|du)\s*$',  # Disk usage without args
+        r'^free\s+',  # Memory info (Linux)
+        r'^free\s*$',  # Memory info without args
+        r'^vm_stat\s*$',  # Memory info (macOS)
+
         # Tree/structure inspection
         r'^tree\s+',
-        
+
         # Text processing
         r'^(sed|awk|cut|sort|uniq)\s+',
-        
+
         # File comparison
         r'^diff\s+',
-        
+
         # Search
         r'^locate\s+',
-        
+
         # Environment
         r'^(printenv|echo|env)\s+',
     ]
