@@ -68,6 +68,10 @@ class ObserveExecutor:
         # Search
         r'^locate\s+',
 
+        # Semantic code search (read-only, requires pre-built index)
+        r'^semquery\s+(search|find|overview|doctor)\s+',
+        r'^semquery\s+(search|find|overview|doctor)\s*$',
+
         # Environment
         r'^(printenv|echo|env)\s+',
     ]
