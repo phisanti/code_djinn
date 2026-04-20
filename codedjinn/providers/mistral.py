@@ -289,42 +289,46 @@ class MistralAgent(Agent):
         for step_num in range(1, max_steps + 1):
             refresh_step_context(session_state)
 
-            # If not first step, add step context as user message
-            # This provides progress updates without rebuilding the entire system prompt
-            if step_num > 1:
-                remaining = max_steps - step_num + 1
+            # Add step context as user message for progress tracking
+            remaining = max_steps - step_num + 1
 
-                if step_num >= max_steps:
-                    # Final step urgency
-                    step_context = (
-                        f"⚠️ FINAL STEP ({step_num}/{max_steps}) - THIS IS YOUR LAST CHANCE\n"
-                        f"You have reached the absolute final step. NO MORE STEPS REMAIN after this.\n"
-                        f"IMMEDIATELY use finish_reasoning to provide your final answer.\n"
-                        f"Do not perform additional reads. Synthesize your answer from all gathered evidence."
-                    )
-                elif remaining <= 1:
-                    # Almost done
-                    step_context = (
-                        f"⚠️ ALMOST DONE (step {step_num} of {max_steps}) - RUSH TO FINISH\n"
-                        f"You have only {remaining} step remaining after this one.\n"
-                        f"Please wrap up your investigation and prepare to call finish_reasoning.\n"
-                        f"Gather any final critical information and prepare your final answer."
-                    )
-                elif remaining <= 2:
-                    # Getting close
-                    step_context = (
-                        f"Getting close (step {step_num} of {max_steps}) - Start planning conclusion\n"
-                        f"You have {remaining} step(s) remaining. Plan to finish_reasoning within the next step or two.\n"
-                        f"Continue gathering evidence but keep your final synthesis in mind."
-                    )
-                else:
-                    # Plenty of time
-                    step_context = (
-                        f"Step {step_num} of {max_steps} - {remaining} step(s) remaining\n"
-                        f"Continue investigating systematically. You have plenty of steps remaining to be thorough."
-                    )
+            if step_num >= max_steps:
+                # Final step urgency
+                step_context = (
+                    f"FINAL STEP ({step_num}/{max_steps}) - THIS IS YOUR LAST CHANCE\n"
+                    f"You have reached the absolute final step. NO MORE STEPS REMAIN after this.\n"
+                    f"IMMEDIATELY use finish_reasoning to provide your final answer.\n"
+                    f"Do not perform additional reads. Synthesize your answer from all gathered evidence."
+                )
+            elif remaining <= 1:
+                # Almost done
+                step_context = (
+                    f"ALMOST DONE (step {step_num}/{max_steps}) - RUSH TO FINISH\n"
+                    f"You have only {remaining} step remaining after this one.\n"
+                    f"Please wrap up your investigation and prepare to call finish_reasoning.\n"
+                    f"Gather any final critical information and prepare your final answer."
+                )
+            elif remaining <= 2:
+                # Getting close
+                step_context = (
+                    f"Getting close (step {step_num}/{max_steps}) - Start planning conclusion\n"
+                    f"You have {remaining} step(s) remaining. Plan to finish_reasoning within the next step or two.\n"
+                    f"Continue gathering evidence but keep your final synthesis in mind."
+                )
+            elif step_num == 1:
+                # First step
+                step_context = (
+                    f"Step {step_num}/{max_steps} - Begin your investigation.\n"
+                    f"You have {max_steps} steps available. Search first, then read what you find."
+                )
+            else:
+                # Plenty of time
+                step_context = (
+                    f"Step {step_num}/{max_steps} - {remaining} step(s) remaining\n"
+                    f"Continue investigating systematically. You have plenty of steps remaining to be thorough."
+                )
 
-                messages.append({"role": "user", "content": step_context})
+            messages.append({"role": "user", "content": step_context})
 
             # Call LLM with accumulated conversation history
             response = self.client.chat.complete(

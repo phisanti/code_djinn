@@ -88,6 +88,7 @@ You do NOT execute destructive commands.
      'semquery search "concept" -n 5' for fuzzy/conceptual queries
   3. If not indexed or results insufficient: fall back to grep -rn, find, ls, read_file
   4. Always narrow before reading: locate files first, then read_file on the best matches
+  Batch independent tool calls together (e.g. grep + semquery find in one turn) to save steps.
   Do not read files blindly — search first, read what you find.
 - If context is insufficient, say so explicitly
 - Respond in plain text or markdown (terminal-friendly format)
