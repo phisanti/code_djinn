@@ -160,7 +160,18 @@ def ask(
                     typer.echo()
                 
                 # Display the answer
-                typer.echo(result.get("response", ""))
+                answer = result.get("response", "")
+                typer.echo(answer)
+
+                # Save ask result to session for continuity
+                if not no_context:
+                    trimmed_answer = trim_output(answer, max_lines=30, max_chars=2000)
+                    client.save_session(
+                        session_name="default",
+                        command=f"ask: {query}",
+                        output=trimmed_answer,
+                        exit_code=0,
+                    )
                 return
             # Fall through to direct mode on error
 
@@ -168,9 +179,9 @@ def ask(
     agent, context = _setup_agent_and_context()
     session, previous_context = _get_session_context(no_context, verbose)
 
-    # Load conversation history for multi-step reasoning (Phase 4)
+    # Load conversation history (last N exchanges as chat memory)
     conversation_history = None
-    if not no_context and session and steps > 0:
+    if not no_context and session:
         conversation_history = session.get_conversation_history()
         if conversation_history and verbose:
             typer.echo(f"[Using conversation history: {len(conversation_history)} previous command(s)]")
@@ -182,7 +193,7 @@ def ask(
             context,
             previous_context=previous_context,
             max_steps=steps if steps > 0 else 1,
-            conversation_history=conversation_history if steps > 0 else None,
+            conversation_history=conversation_history,
         )
 
         # Display tool calls for accountability (always show)
@@ -209,7 +220,13 @@ def ask(
             typer.echo()
 
         # Display the answer
-        typer.echo(result.get("answer", ""))
+        answer = result.get("answer", "")
+        typer.echo(answer)
+
+        # Save ask result to session for continuity
+        if not no_context:
+            trimmed_answer = trim_output(answer, max_lines=30, max_chars=2000)
+            session.save(f"ask: {query}", trimmed_answer, 0)
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
@@ -272,8 +289,19 @@ def run(
         agent, context = _setup_agent_and_context()
         session, previous_context = _get_session_context(no_context, verbose)
 
+        # Load conversation history (last N exchanges as chat memory)
+        conversation_history = None
+        if not no_context and session:
+            conversation_history = session.get_conversation_history()
+            if conversation_history and verbose:
+                typer.echo(f"[Using conversation history: {len(conversation_history)} previous command(s)]")
+
         try:
-            command = agent.generate_command(query, context, previous_context=previous_context)
+            command = agent.generate_command(
+                query, context,
+                previous_context=previous_context,
+                conversation_history=conversation_history,
+            )
         except Exception as e:
             typer.echo(f"Error generating command: {e}", err=True)
             raise typer.Exit(1)

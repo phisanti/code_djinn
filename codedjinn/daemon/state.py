@@ -92,6 +92,10 @@ class DaemonState:
         # Session storage: {session_name: SessionData}
         self.sessions: Dict[str, SessionData] = {}
 
+        # Conversation history ring: {session_name: list[dict]}
+        self.conversation_histories: Dict[str, list[Dict[str, Any]]] = {}
+        self.max_history_exchanges: int = 10
+
         # File content cache: {path: CachedFileContent}
         self.file_content_cache: Dict[str, CachedFileContent] = {}
         self.file_cache_ttl: float = 30.0  # Same as context TTL
@@ -261,35 +265,14 @@ class DaemonState:
     
     def get_conversation_history(self, session_name: str) -> Optional[list[Dict[str, Any]]]:
         """
-        Get conversation history from disk for multi-step reasoning.
-        
+        Get conversation history from in-memory ring.
+
         Returns list of dicts with 'command', 'output', 'exit_code' keys, or None if no history.
-        Output is trimmed to 200 chars to maintain token budget.
         """
-        import json
-        
-        history_file = Path.home() / ".config/codedjinn/sessions" / f"{session_name}_history.json"
-        
-        if not history_file.exists():
+        ring = self.conversation_histories.get(session_name)
+        if not ring:
             return None
-        
-        try:
-            with open(history_file) as f:
-                data = json.load(f)
-            
-            if not data:
-                return None
-            
-            return [
-                {
-                    'command': ex.get('command', ''),
-                    'output': ex.get('output', '')[:200],  # Trim to 200 chars
-                    'exit_code': ex.get('exit_code', 0)
-                }
-                for ex in data
-            ]
-        except (json.JSONDecodeError, KeyError, TypeError):
-            return None
+        return list(ring)
     
     def save_session(
         self,
@@ -299,10 +282,10 @@ class DaemonState:
         exit_code: int,
     ) -> None:
         """
-        Save session to in-memory storage.
-        
+        Save session to in-memory storage and append to history ring.
+
         Memory update is instant (~0ms).
-        Disk persistence happens asynchronously.
+        Disk persistence happens on daemon shutdown.
         """
         self.sessions[session_name] = SessionData(
             command=command,
@@ -310,39 +293,80 @@ class DaemonState:
             timestamp=datetime.now().isoformat(),
             exit_code=exit_code,
         )
+
+        # Append to conversation history ring
+        if session_name not in self.conversation_histories:
+            self.conversation_histories[session_name] = []
+        ring = self.conversation_histories[session_name]
+        ring.append({
+            'command': command,
+            'output': output[:200],
+            'exit_code': exit_code,
+        })
+        if len(ring) > self.max_history_exchanges:
+            self.conversation_histories[session_name] = ring[-self.max_history_exchanges:]
     
     def clear_session(self, session_name: str) -> None:
-        """Clear a session from memory."""
+        """Clear a session and its history from memory."""
         if session_name in self.sessions:
             del self.sessions[session_name]
+        if session_name in self.conversation_histories:
+            del self.conversation_histories[session_name]
     
     def _load_sessions_from_disk(self) -> None:
-        """Load existing sessions from disk on daemon startup."""
+        """Load existing sessions and conversation histories from disk on daemon startup."""
         import json
         session_dir = Path.home() / ".config/codedjinn/sessions"
-        
+
         if not session_dir.exists():
             return
-        
+
         for session_file in session_dir.glob("*.json"):
+            name = session_file.stem
+            # Skip history files (loaded separately below)
+            if name.endswith("_history"):
+                continue
             try:
                 with open(session_file) as f:
                     data = json.load(f)
-                session_name = session_file.stem
-                self.sessions[session_name] = SessionData(**data)
+                self.sessions[name] = SessionData(**data)
             except (json.JSONDecodeError, KeyError, TypeError):
-                pass  # Skip corrupted files
+                pass
+
+        # Load conversation histories
+        for history_file in session_dir.glob("*_history.json"):
+            # "default_history.json" -> session_name "default"
+            name = history_file.stem.removesuffix("_history")
+            try:
+                with open(history_file) as f:
+                    data = json.load(f)
+                if data:
+                    self.conversation_histories[name] = [
+                        {
+                            'command': ex.get('command', ''),
+                            'output': ex.get('output', '')[:200],
+                            'exit_code': ex.get('exit_code', 0),
+                        }
+                        for ex in data[-self.max_history_exchanges:]
+                    ]
+            except (json.JSONDecodeError, KeyError, TypeError):
+                pass
     
     def persist_sessions(self) -> None:
-        """Persist all sessions to disk (called on shutdown)."""
+        """Persist all sessions and conversation histories to disk (called on shutdown)."""
         import json
         session_dir = Path.home() / ".config/codedjinn/sessions"
         session_dir.mkdir(parents=True, exist_ok=True)
-        
+
         for session_name, data in self.sessions.items():
             session_file = session_dir / f"{session_name}.json"
             with open(session_file, "w") as f:
                 json.dump(asdict(data), f, indent=2)
+
+        for session_name, ring in self.conversation_histories.items():
+            history_file = session_dir / f"{session_name}_history.json"
+            with open(history_file, "w") as f:
+                json.dump(ring, f, indent=2)
     
     def get_stats(self) -> Dict[str, Any]:
         """Get daemon statistics for health check."""

@@ -75,12 +75,19 @@ You do NOT execute destructive commands.
 - Use read_file tool to read relevant files when needed for better context
 - Use execute_observe_command for safe inspection commands:
   * File inspection: git log, ls, grep, find, cat, head, tail
-  * Process queries: ps aux, ps -m (macOS sort by memory), ps -eo, top -l 1 (macOS), top -b -n 1 (Linux)
-  * Memory/system: free (Linux), vm_stat (macOS), df, du
+  * Process lookup: pgrep <name> (find PID), ps aux | grep <name>, pstree
+  * Process detail: lsof -p <PID> (open files/sockets), lsof -i (all network connections)
+  * Memory/CPU: ps aux, top (batch mode), pidstat (Linux)
+  * Network: netstat -an, ss -tulnp (Linux), lsof -i :<port>
+  * Memory/system: free -h (Linux), vm_stat (macOS), df -h, du -sh
 - Each tool call should have clear reasoning in the 'context' parameter for accountability
+- Process investigation workflow (e.g. "what is the hq process doing?"):
+  1. Find PID: 'pgrep -la hq' (macOS/Linux) or 'ps aux | grep hq'
+  2. Inspect open files: 'lsof -p <PID>'
+  3. Check network connections: 'lsof -i' or 'netstat -an | grep <PID>'
 - For process/memory queries, use OS-appropriate syntax:
-  * macOS: 'ps aux -m | head -10' (sort by memory), 'top -l 1 | head -20'
-  * Linux: 'ps aux --sort=-%mem | head -10', 'top -b -n 1 | head -20', 'free -h'
+  * macOS: 'pgrep -la <name>', 'ps aux -m | head -10', 'top -l 1 | head -20', 'lsof -p <PID>'
+  * Linux: 'pgrep -a <name>', 'ps aux --sort=-%mem | head -10', 'top -b -n 1 | head -20', 'free -h', 'ss -tulnp'
 - Agentic search strategy (use when the question requires exploring code beyond session_context):
   1. Start with 'semquery doctor' to check if a code index is available
   2. If indexed: use 'semquery find "Symbol*" --kind function --compact' for symbol lookup,

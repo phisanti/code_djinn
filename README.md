@@ -66,16 +66,50 @@ code-djinn run "find large files" -v
 code-djinn run "show current date" --no-confirm
 ```
 
-### Ask Questions About Previous Output
+### Ask Questions and Observe Your System
 ```bash
-# First, run a command
+# Ask about the previous command's output
 code-djinn run "git log --oneline -n 10"
-
-# Then ask about its output (context-aware!)
 code-djinn ask "what was the last commit about?"
+
+# Ask about running processes (no prior command needed)
+code-djinn ask "what is the hq process doing?"
+code-djinn ask "which processes are using the most memory?"
+code-djinn ask "what network connections does process 1234 have?"
+
+# Ask about code or files
+code-djinn ask "where is the database connection configured?"
+code-djinn ask "explain the error in the last output"
 
 # Start fresh (ignore previous context)
 code-djinn run "list python files" --no-context
+```
+
+Ask mode can read files, run safe observation commands (`ps`, `pgrep`, `lsof`, `netstat`, `git log`, etc.) and search code — without executing any destructive commands.
+
+### Daemon Management
+
+Code Djinn runs a background daemon that keeps the Mistral client warm, reducing per-request overhead from ~900ms to ~5ms.
+
+```bash
+code-djinn daemon status   # Check if daemon is running
+code-djinn daemon start    # Start daemon manually
+code-djinn daemon stop     # Stop daemon
+code-djinn daemon restart  # Restart daemon
+```
+
+The daemon starts automatically on first use and shuts down after 1 hour idle. Set `CODEDJINN_NO_DAEMON=1` to force direct mode.
+
+### File Context Management
+
+Pin files into ask/run context so the agent can reference them without you quoting paths:
+
+```bash
+code-djinn context add src/main.py           # Add file (default 10m duration)
+code-djinn context add src/main.py -d 1h     # Add with 1-hour expiry
+code-djinn context list                       # Show active context files
+code-djinn context drop src/main.py          # Remove a file
+code-djinn context clear                      # Clear all file context
 ```
 
 ### Configuration Management
@@ -99,10 +133,22 @@ code-djinn run "your request" -v           # Show command before execution
 code-djinn run "your request" --no-confirm # Skip safety confirmation
 code-djinn run "your request" --no-context # Ignore previous command context
 
-# Ask about previous output
-code-djinn ask "your question"             # Analyze previous command output
+# Ask questions / observe system
+code-djinn ask "your question"             # Analyze output, read files, observe processes
 code-djinn ask "your question" -v          # Verbose output
 code-djinn ask "your question" --no-context # Ignore previous context
+
+# Daemon management
+code-djinn daemon status                   # Check if daemon is running
+code-djinn daemon start                    # Start daemon
+code-djinn daemon stop                     # Stop daemon
+code-djinn daemon restart                  # Restart daemon
+
+# File context
+code-djinn context add <file> [-d 10m]    # Pin a file into context
+code-djinn context list                    # Show active context files
+code-djinn context drop <file>            # Remove a file from context
+code-djinn context clear                   # Clear all file context
 
 # Configuration management
 code-djinn settings init                   # Interactive configuration wizard
@@ -113,9 +159,11 @@ code-djinn settings edit                   # Open config file in $EDITOR
 ## Key Features
 
 - **Context Awareness**: Automatically remembers previous commands and their output
+- **Process & System Observation**: Ask mode can inspect running processes (`pgrep`, `lsof`, `ps`, `netstat`) without executing destructive commands
 - **Safety First**: Analyzes commands for potential risks and requires confirmation
 - **Real-time Streaming**: Command output streams directly to your terminal
-- **Fast Performance**: Optimized startup time with caching (99.6% improvement)
+- **Background Daemon**: Keeps the Mistral client warm for ~5ms response overhead (vs ~900ms cold start)
+- **File Context Pinning**: Attach files to the session so the agent references them automatically
 - **Smart Parsing**: Handles both XML-structured and plain text LLM responses
 - **Session Management**: Persistent context across CLI invocations
 
@@ -146,14 +194,18 @@ Use the `--help` flag to see all available options:
 │ --help          Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────╮
-│ ask        Ask a question about the previous command output.             │
-│ run        Generate and execute a shell command.                         │
-│ settings   Manage Code Djinn configuration.                              │
+│ ask       Ask a question about the previous command output (no execution)│
+│ run       Generate and execute a shell command.                          │
+│ settings  Manage Code Djinn configuration.                               │
+│ daemon    Manage the Code Djinn daemon.                                  │
+│ context   Manage file context for Code Djinn.                            │
 ╰──────────────────────────────────────────────────────────────────────────╯
 
 # Get help for specific commands
 ❯ code-djinn run --help
 ❯ code-djinn ask --help
+❯ code-djinn daemon --help
+❯ code-djinn context --help
 ❯ code-djinn settings --help
 ```
 
@@ -167,7 +219,9 @@ If you encounter issues:
    - Config location: `~/.config/codedjinn/config.cfg`
 4. **Verify API key**: Ensure your Mistral API key is valid
 5. **Clear session context**: `code-djinn run "your command" --no-context`
-6. **Check Python cache**:
+6. **Restart the daemon**: `code-djinn daemon restart`
+7. **Disable daemon** (force direct mode): `CODEDJINN_NO_DAEMON=1 code-djinn run "..."`
+8. **Check Python cache**:
    ```bash
    find ~/.local/share/codedjinn -type f -name "*.json"
    rm -rf ~/.local/share/codedjinn/sessions/  # Clear all sessions

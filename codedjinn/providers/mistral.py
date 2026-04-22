@@ -63,7 +63,8 @@ class MistralAgent(Agent):
         self,
         query: str,
         context: dict,
-        previous_context: dict = None
+        previous_context: dict = None,
+        conversation_history: list = None
     ) -> str:
         """
         Generate shell command for user query (run mode).
@@ -75,12 +76,13 @@ class MistralAgent(Agent):
             query: Natural language request for command
             context: Execution context {cwd, os_name, shell}
             previous_context: Optional previous command context
+            conversation_history: Optional list of previous exchanges
 
         Returns:
             Shell command string
         """
         # Build system prompt with full context
-        system_prompt = self._build_system_prompt(context, previous_context)
+        system_prompt = self._build_system_prompt(context, previous_context, conversation_history)
 
         # Get tool schema for shell execution
         tools = self._get_tool_schema(context)
@@ -165,7 +167,7 @@ class MistralAgent(Agent):
         tool_calls_executed = []
 
         # Build system prompt
-        system_prompt = self._build_ask_system_prompt(context, previous_context)
+        system_prompt = self._build_ask_system_prompt(context, previous_context, conversation_history)
 
         # Initial query with forced tool use
         response = self.client.chat.complete(
@@ -564,25 +566,31 @@ Please provide your answer based on this evidence."""
         )
         return result["answer"]
 
-    def _build_system_prompt(self, context: dict, previous_context: dict = None) -> str:
+    def _build_system_prompt(self, context: dict, previous_context: dict = None, conversation_history: list = None) -> str:
         """Build system prompt for run mode."""
-        return build_prompt(
+        base = build_prompt(
             mode="run",
             os_name=context['os_name'],
             shell=context['shell'],
             cwd=str(context['cwd']),
             session_context=previous_context,
         )
+        if conversation_history:
+            base += "\n\n" + self._format_conversation_history_xml(conversation_history)
+        return base
 
-    def _build_ask_system_prompt(self, context: dict, previous_context: dict = None) -> str:
+    def _build_ask_system_prompt(self, context: dict, previous_context: dict = None, conversation_history: list = None) -> str:
         """Build system prompt for ask mode (single-shot)."""
-        return build_prompt(
+        base = build_prompt(
             mode="ask",
             os_name=context['os_name'],
             shell=context['shell'],
             cwd=str(context['cwd']),
             session_context=previous_context,
         )
+        if conversation_history:
+            base += "\n\n" + self._format_conversation_history_xml(conversation_history)
+        return base
 
     def _build_ask_step_prompt(
         self,

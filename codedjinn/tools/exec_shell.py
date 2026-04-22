@@ -99,7 +99,6 @@ def _is_fullscreen_tui(command: str) -> bool:
     # Full-screen TUI programs that need PTY
     tui_programs = [
         r'\bhtop\b',
-        r'\btop\b',
         r'\bvim?\b',      # vim or vi
         r'\bnvim\b',      # neovim
         r'\bemacs\b',
@@ -111,8 +110,14 @@ def _is_fullscreen_tui(command: str) -> bool:
     # Combine patterns
     pattern = '|'.join(tui_programs)
 
-    # Check if command contains TUI program
-    return bool(re.search(pattern, command))
+    if re.search(pattern, command):
+        return True
+
+    # top is TUI unless batch-mode flags are present (-b for Linux, -l for macOS, -n)
+    if re.search(r'\btop\b', command) and not re.search(r'\btop\b.*-[bln]\b', command):
+        return True
+
+    return False
 
 
 def _execute_with_streaming(args, shell: bool, cwd: Optional[Path]) -> Tuple[int, str]:

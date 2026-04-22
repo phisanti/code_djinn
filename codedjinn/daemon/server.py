@@ -215,8 +215,10 @@ class DaemonServer:
         try:
             # Get session context (from memory - instant!)
             previous_context = None
+            conversation_history = None
             if not options.get("no_context", False):
                 previous_context = self.state.get_session(session_name)
+                conversation_history = self.state.get_conversation_history(session_name)
             
             # Build context (cached or fresh)
             os_name = self.state.config.get("os", "Linux")
@@ -252,6 +254,7 @@ class DaemonServer:
                 query=query,
                 context=context,
                 previous_context=previous_context,
+                conversation_history=conversation_history,
             )
             
             return serialize_response("ok", result={"command": command})
@@ -279,9 +282,7 @@ class DaemonServer:
             conversation_history = None
             if not options.get("no_context", False):
                 previous_context = self.state.get_session(session_name)
-                # Get conversation history for multi-step reasoning
-                if steps > 0:
-                    conversation_history = self.state.get_conversation_history(session_name)
+                conversation_history = self.state.get_conversation_history(session_name)
             
             # Create agent
             from codedjinn.providers.mistral import MistralAgent
@@ -308,14 +309,26 @@ class DaemonServer:
                 context=context,
                 previous_context=previous_context,
                 max_steps=steps if steps > 0 else 1,
-                conversation_history=conversation_history if steps > 0 else None,
+                conversation_history=conversation_history,
             )
             # analyze() returns dict with answer and tool_calls
+            answer = response_data.get("answer", "")
             result = {
-                "response": response_data.get("answer", ""),
+                "response": answer,
                 "tool_calls": response_data.get("tool_calls", [])
             }
-            
+
+            # Save ask result to session for continuity
+            if not options.get("no_context", False):
+                from codedjinn.tools.output_trimmer import trim_output
+                trimmed_answer = trim_output(answer, max_lines=30, max_chars=2000)
+                self.state.save_session(
+                    session_name=session_name,
+                    command=f"ask: {query}",
+                    output=trimmed_answer,
+                    exit_code=0,
+                )
+
             return serialize_response("ok", result=result)
             
         except Exception as e:

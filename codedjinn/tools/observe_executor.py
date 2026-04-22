@@ -3,17 +3,22 @@
 Allows the ask agent to run read-only observation commands like:
 - git: git log, git diff, git status, git show, git branch
 - file inspection: ls, cat, grep, head, tail, find, file
-- process observation: ps (with flags), top (batch mode)
+- process lookup: pgrep (find PID by name), ps (with flags), pstree
+- process detail: lsof (open files/sockets per process), lsof -i (network)
 - system info: df, du, free, vm_stat, uname, date, wc
+- network: netstat, ss (Linux socket stats)
 - text processing: sed, awk, cut, sort, uniq
 
-Enhanced for process/memory queries:
-- ps aux --sort=-%mem | head -10  (top memory consumers)
-- ps -eo pid,ppid,cmd,%mem,%cpu --sort=-%mem  (custom format)
-- top -l 1 | head -20  (macOS batch mode)
-- top -b -n 1 | head -20  (Linux batch mode)
-- free -h  (Linux memory info)
-- vm_stat  (macOS memory info)
+Process investigation workflow:
+- pgrep -la hq                     (find PID of process named 'hq')
+- ps aux | grep hq                 (alternative PID lookup)
+- lsof -p <PID>                    (open files/sockets for a process)
+- lsof -i                          (all network connections)
+- netstat -an | grep <port>        (connections on a port)
+- top -l 1 | head -20              (macOS batch mode)
+- top -b -n 1 | head -20           (Linux batch mode)
+- free -h                          (Linux memory info)
+- vm_stat                          (macOS memory info)
 """
 
 import re
@@ -48,6 +53,17 @@ class ObserveExecutor:
         r'^ps\s+',  # Allow ps with any flags (aux, -eo, etc)
         r'^ps\s*$',  # Also allow bare ps
         r'^top\s+-[bln]\s+',  # Batch mode: top -b, top -l, top -n (Linux/macOS)
+        r'^pgrep\s+',  # Find PID by name: pgrep hq, pgrep -la python
+        r'^pgrep\s*$',  # Bare pgrep
+        r'^pstree\s*',  # Process tree: pstree, pstree -p <pid>
+        r'^lsof\s+',  # Open files/sockets per process: lsof -p <pid>, lsof -i
+        r'^lsof\s*$',  # Bare lsof
+        r'^netstat\s+',  # Network connections: netstat -an, netstat -tulnp
+        r'^netstat\s*$',  # Bare netstat
+        r'^ss\s+',  # Socket stats (Linux): ss -tulnp, ss -p
+        r'^ss\s*$',  # Bare ss
+        r'^pidstat\s+',  # Per-process CPU/IO stats (Linux)
+        r'^pidstat\s*$',  # Bare pidstat
 
         # Memory and system info
         r'^(df|du)\s+',  # Disk usage with args
