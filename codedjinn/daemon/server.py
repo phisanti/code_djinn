@@ -271,6 +271,7 @@ class DaemonServer:
         cwd = request.get("cwd", str(Path.cwd()))
         session_name = request.get("session_name", "default")
         steps = request.get("steps", 0)
+        skill_data = request.get("skill_data")
         options = request.get("options", {})
         
         if not query:
@@ -303,13 +304,25 @@ class DaemonServer:
                 "shell": shell,
             }
             
-            # Analyze - use unified analyze() method for both single-shot and multi-step
+            skill = None
+            if skill_data:
+                from codedjinn.skills.loader import SkillConfig
+                skill = SkillConfig(
+                    name=skill_data.get("name", ""),
+                    title=skill_data.get("title", ""),
+                    steps=skill_data.get("steps", 0),
+                    extra_commands=skill_data.get("extra_commands", []),
+                    description=skill_data.get("description", ""),
+                )
+
             response_data = agent.analyze(
                 question=query,
                 context=context,
                 previous_context=previous_context,
                 max_steps=steps if steps > 0 else 1,
                 conversation_history=conversation_history,
+                extra_commands=skill.extra_commands if skill else None,
+                skill=skill,
             )
             # analyze() returns dict with answer and tool_calls
             answer = response_data.get("answer", "")

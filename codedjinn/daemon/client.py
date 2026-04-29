@@ -190,6 +190,7 @@ class DaemonClient:
         session_name: str = "default",
         no_context: bool = False,
         steps: int = 0,
+        skill=None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         Send 'ask' command to daemon.
@@ -205,15 +206,28 @@ class DaemonClient:
             (success, result_dict)
             result_dict has 'response' key on success, 'error' on failure
         """
+        skill_data = None
+        if skill is not None:
+            skill_data = {
+                "name": skill.name,
+                "title": skill.title,
+                "steps": skill.steps,
+                "extra_commands": skill.extra_commands,
+                "description": skill.description,
+            }
+        effective_steps = steps or (skill.steps if skill else 0)
+        ask_timeout = max(self.timeout, effective_steps * 45.0) if effective_steps > 1 else self.timeout
         response = self._send_request(
             command="ask",
             query=query,
             cwd=cwd or str(Path.cwd()),
             session_name=session_name,
-            steps=steps,
+            steps=effective_steps,
+            skill_data=skill_data,
             options={
                 "no_context": no_context,
             },
+            timeout=ask_timeout,
         )
         
         if response.get("status") == "ok":
@@ -278,6 +292,7 @@ class DaemonClient:
         cwd: str = "",
         session_name: str = "default",
         steps: int = 0,
+        skill_data: Optional[Dict[str, Any]] = None,
         options: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
@@ -302,6 +317,7 @@ class DaemonClient:
                 cwd=cwd,
                 session_name=session_name,
                 steps=steps,
+                skill_data=skill_data,
                 options=options,
             )
             sock.sendall(request_data)

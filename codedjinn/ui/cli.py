@@ -105,6 +105,31 @@ def _get_session_context(no_context: bool, verbose: bool) -> Tuple:
 # Commands - Each command is linear: setup → execute → handle result
 # ============================================================================
 
+def _render_tool_calls(tool_calls: list) -> None:
+    """Display tool calls used during ask mode for user accountability."""
+    if not tool_calls:
+        return
+    typer.echo("\n[Tools used]")
+    for tool_call in tool_calls:
+        tool = tool_call.get("tool", "unknown")
+        context_str = tool_call.get("context", "")
+        if tool == "read_file":
+            path = tool_call.get("path", "")
+            output = tool_call.get("output", "")
+            typer.echo(f"  📄 read_file: {path}")
+            if context_str:
+                typer.echo(f"     Reason: {context_str}")
+            typer.echo(f"     Output: {output}")
+        elif tool == "execute_observe_command":
+            command = tool_call.get("command", "")
+            output = tool_call.get("output", "")
+            typer.echo(f"  🔍 execute_observe_command: {command}")
+            if context_str:
+                typer.echo(f"     Reason: {context_str}")
+            typer.echo(f"     Output: {output}")
+    typer.echo()
+
+
 @app.command()
 def ask(
     query: str = typer.Argument(..., help="Question about previous command output"),
@@ -123,7 +148,17 @@ def ask(
         code-djinn ask "explain the error" --steps 3 -v
 
     Can read files from disk to provide better context (when using steps > 0).
+
+    Skill directives (leading /skill tokens):
+        code-djinn ask "/search where is the auth middleware?"
     """
+    from codedjinn.skills import resolve_skill, SKILLS_DIR
+    query, skill = resolve_skill(query, SKILLS_DIR)
+    extra_commands = skill.extra_commands if skill else []
+    effective_steps = steps if steps > 0 else (skill.steps if skill else 0)
+    if verbose and skill:
+        typer.echo(f"[skill: {skill.name} — steps={skill.steps}, extra_commands={extra_commands}]", err=True)
+
     # Try daemon mode first (faster if available)
     if _should_use_daemon() and not no_daemon:
         client = _get_daemon_client()
@@ -133,32 +168,13 @@ def ask(
                 cwd=str(Path.cwd()),
                 session_name="default",
                 no_context=no_context,
-                steps=steps,
+                steps=effective_steps,
+                skill=skill,
             )
             if success:
                 # Display tool calls for accountability (always show)
-                tool_calls = result.get("tool_calls", [])
-                if tool_calls:
-                    typer.echo("\n[Tools used]")
-                    for tool_call in tool_calls:
-                        tool = tool_call.get("tool", "unknown")
-                        context = tool_call.get("context", "")
-                        if tool == "read_file":
-                            path = tool_call.get("path", "")
-                            output = tool_call.get("output", "")
-                            typer.echo(f"  📄 read_file: {path}")
-                            if context:
-                                typer.echo(f"     Reason: {context}")
-                            typer.echo(f"     Output: {output}")
-                        elif tool == "execute_observe_command":
-                            command = tool_call.get("command", "")
-                            output = tool_call.get("output", "")
-                            typer.echo(f"  🔍 execute_observe_command: {command}")
-                            if context:
-                                typer.echo(f"     Reason: {context}")
-                            typer.echo(f"     Output: {output}")
-                    typer.echo()
-                
+                _render_tool_calls(result.get("tool_calls", []))
+
                 # Display the answer
                 answer = result.get("response", "")
                 typer.echo(answer)
@@ -187,37 +203,18 @@ def ask(
             typer.echo(f"[Using conversation history: {len(conversation_history)} previous command(s)]")
 
     try:
-        # Use unified analyze() method for both single-shot and multi-step
         result = agent.analyze(
             query,
             context,
             previous_context=previous_context,
-            max_steps=steps if steps > 0 else 1,
+            max_steps=effective_steps if effective_steps > 0 else 1,
             conversation_history=conversation_history,
+            extra_commands=extra_commands,
+            skill=skill,
         )
 
         # Display tool calls for accountability (always show)
-        tool_calls = result.get("tool_calls", [])
-        if tool_calls:
-            typer.echo("\n[Tools used]")
-            for tool_call in tool_calls:
-                tool = tool_call.get("tool", "unknown")
-                context_str = tool_call.get("context", "")
-                if tool == "read_file":
-                    path = tool_call.get("path", "")
-                    output = tool_call.get("output", "")
-                    typer.echo(f"  📄 read_file: {path}")
-                    if context_str:
-                        typer.echo(f"     Reason: {context_str}")
-                    typer.echo(f"     Output: {output}")
-                elif tool == "execute_observe_command":
-                    command = tool_call.get("command", "")
-                    output = tool_call.get("output", "")
-                    typer.echo(f"  🔍 execute_observe_command: {command}")
-                    if context_str:
-                        typer.echo(f"     Reason: {context_str}")
-                    typer.echo(f"     Output: {output}")
-            typer.echo()
+        _render_tool_calls(result.get("tool_calls", []))
 
         # Display the answer
         answer = result.get("answer", "")
@@ -342,20 +339,33 @@ def run(
 
 @app.command()
 def settings(
-    action: str = typer.Argument(..., help="Action: init, show, or edit"),
+    action: str = typer.Argument(..., help="Action: init, show, edit, list-skills, add-skill, show-skill, edit-skill, remove-skill"),
+    name: str = typer.Argument(None, help="Skill name (for skill actions)"),
 ) -> None:
     """
-    Manage Code Djinn configuration.
+    Manage Code Djinn configuration and skills.
 
-    Actions:
-        init - Interactive configuration wizard
-        show - Display current configuration
-        edit - Open config file in $EDITOR
+    Config actions:
+        init          - Interactive configuration wizard
+        show          - Display current configuration
+        edit          - Open config file in $EDITOR
 
-    Performance: Lazy import config_commands to avoid startup overhead.
+    Skill actions:
+        list-skills   - List all defined skills
+        add-skill     - Create a new skill (interactive wizard)
+        show-skill    - Display a skill's YAML
+        edit-skill    - Open skill file in $EDITOR
+        remove-skill  - Delete a skill
+
+    Performance: Lazy imports to avoid startup overhead.
     """
-    from codedjinn.ui.config_commands import handle_config
-    handle_config(action)
+    skill_actions = {"list-skills", "add-skill", "show-skill", "edit-skill", "remove-skill"}
+    if action in skill_actions:
+        from codedjinn.ui.skill_commands import handle_skill
+        handle_skill(action, name)
+    else:
+        from codedjinn.ui.config_commands import handle_config
+        handle_config(action)
 
 
 @app.command()

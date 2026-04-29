@@ -35,6 +35,7 @@ def serialize_request(
     cwd: str = "",
     session_name: str = "default",
     steps: int = 0,
+    skill_data: Optional[Dict[str, Any]] = None,
     options: Optional[Dict[str, Any]] = None,
 ) -> bytes:
     """
@@ -57,6 +58,7 @@ def serialize_request(
         "cwd": cwd,
         "session_name": session_name,
         "steps": steps,
+        "skill_data": skill_data,
         "options": options or {},
     }
     return json.dumps(request).encode("utf-8")

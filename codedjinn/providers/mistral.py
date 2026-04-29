@@ -113,7 +113,9 @@ class MistralAgent(Agent):
         context: dict,
         previous_context: dict = None,
         max_steps: int = 1,
-        conversation_history: list = None
+        conversation_history: list = None,
+        extra_commands: list = None,
+        skill=None,
     ) -> dict:
         """
         Analyze previous output and answer a question (ask mode).
@@ -142,12 +144,13 @@ class MistralAgent(Agent):
         # (will be refactored separately to use new pattern)
         if max_steps == 1:
             return self._analyze_single_shot(
-                question, context, previous_context, conversation_history
+                question, context, previous_context, conversation_history,
+                extra_commands=extra_commands, skill=skill,
             )
 
-        # Multi-step mode: NEW implementation with full conversation history
         return self._analyze_multi_step(
-            question, context, previous_context, max_steps, conversation_history
+            question, context, previous_context, max_steps, conversation_history,
+            extra_commands=extra_commands, skill=skill,
         )
 
     def _analyze_single_shot(
@@ -155,7 +158,9 @@ class MistralAgent(Agent):
         question: str,
         context: dict,
         previous_context: dict = None,
-        conversation_history: list = None
+        conversation_history: list = None,
+        extra_commands: list = None,
+        skill=None,
     ) -> dict:
         """
         Single-shot ask mode: one tool call, immediate follow-up for answer.
@@ -163,11 +168,10 @@ class MistralAgent(Agent):
         Legacy implementation maintained for compatibility and performance.
         """
         file_executor = AskToolExecutor(cwd=str(context['cwd']))
-        observe_executor = ObserveExecutor(cwd=str(context['cwd']))
+        observe_executor = ObserveExecutor(cwd=str(context['cwd']), extra_commands=extra_commands)
         tool_calls_executed = []
 
-        # Build system prompt
-        system_prompt = self._build_ask_system_prompt(context, previous_context, conversation_history)
+        system_prompt = self._build_ask_system_prompt(context, previous_context, conversation_history, skill=skill)
 
         # Initial query with forced tool use
         response = self.client.chat.complete(
@@ -179,7 +183,7 @@ class MistralAgent(Agent):
             tools=self._get_ask_tools(),
             tool_choice="any",  # Force tool use
             temperature=0.3,
-            max_tokens=1500,
+            max_tokens=4096,
         )
 
         message = response.choices[0].message
@@ -188,7 +192,10 @@ class MistralAgent(Agent):
         if hasattr(message, 'tool_calls') and message.tool_calls:
             for tool_call in message.tool_calls:
                 tool_name = tool_call.function.name
-                tool_args = json.loads(tool_call.function.arguments)
+                try:
+                    tool_args = json.loads(tool_call.function.arguments)
+                except json.JSONDecodeError:
+                    tool_args = {}
 
                 if tool_name == "read_file":
                     path = tool_args.get("path", "")
@@ -243,7 +250,9 @@ class MistralAgent(Agent):
         context: dict,
         previous_context: dict = None,
         max_steps: int = 3,
-        conversation_history: list = None
+        conversation_history: list = None,
+        extra_commands: list = None,
+        skill=None,
     ) -> dict:
         """
         Multi-step ask mode: maintain full conversation history across steps.
@@ -263,7 +272,7 @@ class MistralAgent(Agent):
         4. Return final answer with full tool call history
         """
         file_executor = AskToolExecutor(cwd=str(context['cwd']))
-        observe_executor = ObserveExecutor(cwd=str(context['cwd']))
+        observe_executor = ObserveExecutor(cwd=str(context['cwd']), extra_commands=extra_commands)
         tool_calls_executed = []
 
         # Initialize step budget tracking
@@ -277,7 +286,8 @@ class MistralAgent(Agent):
             max_steps=max_steps,
             context=context,
             previous_context=previous_context,
-            conversation_history=conversation_history
+            conversation_history=conversation_history,
+            skill=skill,
         )
 
         # Initialize messages array with system + user
@@ -339,10 +349,29 @@ class MistralAgent(Agent):
                 tools=self._get_ask_tools(),
                 tool_choice="auto",  # Model decides when to use tools
                 temperature=0.3,
-                max_tokens=1500,
+                max_tokens=8192,
             )
 
-            assistant_message = response.choices[0].message
+            choice = response.choices[0]
+            assistant_message = choice.message
+
+            # If we hit the token limit, recover the best available partial answer
+            if choice.finish_reason == "length":
+                content = getattr(assistant_message, "content", "") or ""
+                if isinstance(content, list):
+                    content = "\n".join(str(p) for p in content)
+                content = content.strip()
+                # Also try to recover text from a truncated finish_reasoning call
+                partial_from_tool = ""
+                if hasattr(assistant_message, "tool_calls") and assistant_message.tool_calls:
+                    for _tc in assistant_message.tool_calls:
+                        if _tc.function.name == "finish_reasoning":
+                            import re as _re
+                            m = _re.search(r'"answer"\s*:\s*"(.*)', _tc.function.arguments, _re.DOTALL)
+                            if m:
+                                partial_from_tool = m.group(1)
+                answer = partial_from_tool if len(partial_from_tool) > len(content) else content
+                return {"answer": answer, "tool_calls": tool_calls_executed}
 
             # Check if model used tools
             if hasattr(assistant_message, 'tool_calls') and assistant_message.tool_calls:
@@ -367,7 +396,17 @@ class MistralAgent(Agent):
                 finish_call = None
                 for tool_call in assistant_message.tool_calls:
                     tool_name = tool_call.function.name
-                    tool_args = json.loads(tool_call.function.arguments)
+                    try:
+                        tool_args = json.loads(tool_call.function.arguments)
+                    except json.JSONDecodeError:
+                        if tool_name == "finish_reasoning":
+                            # Mistral truncated the answer JSON — recover partial text
+                            import re as _re
+                            m = _re.search(r'"answer"\s*:\s*"(.*)', tool_call.function.arguments, _re.DOTALL)
+                            partial = m.group(1) if m else tool_call.function.arguments
+                            tool_args = {"answer": partial}
+                        else:
+                            tool_args = {}
 
                     if tool_name == "finish_reasoning":
                         # Defer processing until after other tools
@@ -491,7 +530,7 @@ Please provide your answer based on this evidence."""
                     {"role": "user", "content": synthesis_prompt}
                 ],
                 temperature=0.3,
-                max_tokens=1000,
+                max_tokens=4096,
             )
 
             content = response.choices[0].message.content
@@ -538,7 +577,7 @@ Please provide your answer based on this evidence."""
             model=self.model,
             messages=messages,
             temperature=0.3,
-            max_tokens=1500,
+            max_tokens=4096,
         )
 
         return response.choices[0].message
@@ -579,7 +618,36 @@ Please provide your answer based on this evidence."""
             base += "\n\n" + self._format_conversation_history_xml(conversation_history)
         return base
 
-    def _build_ask_system_prompt(self, context: dict, previous_context: dict = None, conversation_history: list = None) -> str:
+    def _build_skill_xml(self, skill) -> str:
+        """Render a SkillConfig as an XML block prepended to the system prompt.
+
+        The <override> element instructs the model to follow <mandatory_protocol>
+        instead of its default heuristics. Skill XML is prepended (not appended)
+        so the model sees it before base ask instructions — ordering matters for
+        instruction following. All dynamic fields are XML-escaped to prevent
+        prompt injection. Caller must ensure skill is not None.
+        """
+        name = escape_xml_content(skill.name)
+        title = escape_xml_content(skill.title)
+        description = escape_xml_content(skill.description)
+        cmd_elements = "".join(
+            f"    <command>{escape_xml_content(c)}</command>\n"
+            for c in skill.extra_commands
+        )
+        return (
+            f"<active_skill>\n"
+            f"  <name>{name}</name>\n"
+            f"  <title>{title}</title>\n"
+            f"  <steps>{skill.steps}</steps>\n"
+            f"  <extra_commands>\n{cmd_elements}  </extra_commands>\n"
+            f"  <override>MANDATORY: Ignore default search/investigation behavior. "
+            f"You MUST follow the protocol in mandatory_protocol exactly, step by step. "
+            f"Batch all independent tool calls in the same turn.</override>\n"
+            f"  <mandatory_protocol>{description}</mandatory_protocol>\n"
+            f"</active_skill>"
+        )
+
+    def _build_ask_system_prompt(self, context: dict, previous_context: dict = None, conversation_history: list = None, skill=None) -> str:
         """Build system prompt for ask mode (single-shot)."""
         base = build_prompt(
             mode="ask",
@@ -590,6 +658,9 @@ Please provide your answer based on this evidence."""
         )
         if conversation_history:
             base += "\n\n" + self._format_conversation_history_xml(conversation_history)
+        if skill:
+            # Prepend skill block so it precedes base instructions
+            base = self._build_skill_xml(skill) + "\n\n" + base
         return base
 
     def _build_ask_step_prompt(
@@ -599,7 +670,8 @@ Please provide your answer based on this evidence."""
         max_steps: int,
         context: dict,
         previous_context: dict = None,
-        conversation_history: list = None
+        conversation_history: list = None,
+        skill=None,
     ) -> str:
         """
         Build prompt for multi-step reasoning (base prompt only, step context added via messages).
@@ -632,8 +704,11 @@ Please provide your answer based on this evidence."""
         # Start with base ask prompt
         base_prompt = build_ask_prompt(ctx)
 
-        # Build multi-step specific sections
-        sections = [base_prompt]
+        # Skill block leads the prompt so it precedes all other instructions
+        sections = []
+        if skill:
+            sections.append(self._build_skill_xml(skill))
+        sections.append(base_prompt)
 
         # Conversation history section
         if conversation_history:
@@ -647,14 +722,15 @@ Progress tracking: Step context will be provided as the conversation progresses
 </multi_step_reasoning>""")
 
         # Tool instructions for multi-step
-        sections.append("""<multi_step_instructions>
+        skill_note = " Follow the active_skill mandatory_protocol above." if skill else ""
+        sections.append(f"""<multi_step_instructions>
 - Use read_file to gather context when needed for a better answer
 - Use execute_observe_command to run safe observation commands
 - When you have enough information, use finish_reasoning to provide final answer
 - You can stop early if you've reached a conclusion before using all steps
 - Each step should build on previous findings in the conversation
 - Stay focused on answering the original question
-- You can reference previous commands in conversation_history for additional context
+- You can reference previous commands in conversation_history for additional context{skill_note}
 </multi_step_instructions>""")
 
         return "\n".join(sections)

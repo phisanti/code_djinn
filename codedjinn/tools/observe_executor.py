@@ -47,7 +47,7 @@ class ObserveExecutor:
 
         # File inspection
         r'^(ls|cat|grep|head|tail|find|file|wc|od)\s+',
-        r'^(ls|pwd|whoami|date|uname)\s*$',
+        r'^(ls|pwd|whoami|date|uname)(\s.*)?$',
 
         # Process observation (enhanced for memory/CPU queries)
         r'^ps\s+',  # Allow ps with any flags (aux, -eo, etc)
@@ -92,13 +92,27 @@ class ObserveExecutor:
         r'^(printenv|echo|env)\s+',
     ]
     
-    def __init__(self, cwd: Optional[str] = None):
-        """Initialize executor.
-        
+    def __init__(self, cwd: Optional[str] = None, extra_commands: Optional[list] = None):
+        """Initialise the executor.
+
         Args:
-            cwd: Current working directory for command execution
+            cwd: Working directory for command execution. Defaults to Path.cwd().
+            extra_commands: Skill-gated command names from EXTRA_COMMANDS_REGISTRY
+                to add to the per-instance whitelist beyond the class-level
+                SAFE_COMMANDS. Names absent from EXTRA_COMMANDS_REGISTRY are
+                silently ignored — callers (the loader) validate names before
+                passing them here.
         """
         self.cwd = cwd or Path.cwd()
+        if extra_commands:
+            from codedjinn.skills.loader import EXTRA_COMMANDS_REGISTRY
+            self._extra_patterns = [
+                re.compile(EXTRA_COMMANDS_REGISTRY[name])
+                for name in extra_commands
+                if name in EXTRA_COMMANDS_REGISTRY
+            ]
+        else:
+            self._extra_patterns = []
     
     def execute_observe_command(self, command: str) -> str:
         """Execute a safe observation command.
@@ -159,10 +173,13 @@ class ObserveExecutor:
             True if command matches whitelist, False otherwise
         """
         command_lower = command.strip().lower()
-        
-        # Check against whitelist patterns
+
         for pattern in self.SAFE_COMMANDS:
             if re.match(pattern, command_lower):
                 return True
-        
+
+        for pattern in self._extra_patterns:
+            if pattern.match(command_lower):
+                return True
+
         return False
