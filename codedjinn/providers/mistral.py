@@ -3,7 +3,6 @@
 import json
 from typing import Optional, TYPE_CHECKING
 
-from codedjinn.core.agent import Agent
 from codedjinn.core.client_cache import get_cached_client
 from codedjinn.tools.registry import build_mistral_tool_schema, build_ask_tool_schema
 from codedjinn.tools.ask_executor import AskToolExecutor
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
     from mistralai import Mistral
 
 
-class MistralAgent(Agent):
+class MistralAgent:
     """
     Mistral-native agent implementation without langchain overhead.
 
@@ -780,17 +779,3 @@ Progress tracking: Step context will be provided as the conversation progresses
         """Get tool schema for ask mode (delegates to registry)."""
         return build_ask_tool_schema()
 
-    def generate_with_steps(self, query: str, context: dict, max_steps: int) -> list[str]:
-        """
-        NOT IMPLEMENTED: Multi-step command generation.
-
-        Phase 1 does not support multi-step agentic command generation.
-        Use generate_command() for single-shot commands.
-
-        Raises:
-            NotImplementedError: Always (not supported in Phase 1)
-        """
-        raise NotImplementedError(
-            "Multi-step command generation not supported in Phase 1. "
-            "Use generate_command() for single-shot commands."
-        )

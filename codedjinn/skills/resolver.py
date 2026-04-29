@@ -21,7 +21,7 @@ def resolve_skill(query: str, skills_dir: Path) -> tuple[str, SkillConfig | None
     5. If the FIRST token starts with ``/`` but does NOT match a known skill,
        emit a warning to stderr and return the original query unchanged with None.
     6. Non-leading ``/word`` tokens are never inspected.
-    7. Multiple leading skills: first match wins for ``steps``; union
+    7. Multiple leading skills: max of all ``steps`` values; union
        ``extra_commands`` (deduped, order-preserved); concatenate ``description``
        strings with ``"\\n"``.
     8. Return ``(clean_query, skill_or_None)``.
@@ -88,7 +88,7 @@ def _merge(base: SkillConfig, other: SkillConfig) -> SkillConfig:
     """Merge *other* into *base*, returning a new synthetic SkillConfig.
 
     Merge rules:
-    - steps: first (base) wins.
+    - steps: max of both (more skills = more reasoning budget).
     - extra_commands: union, insertion order preserved, no duplicates.
     - description: concatenated with newline; empty strings are treated as
       falsy so a blank body does not insert a bare newline separator.
@@ -113,7 +113,7 @@ def _merge(base: SkillConfig, other: SkillConfig) -> SkillConfig:
     return SkillConfig(
         name=f"{base.name}+{other.name}",
         title=f"{base.title}+{other.title}",
-        steps=base.steps,
+        steps=max(base.steps, other.steps),
         extra_commands=merged_extra,
         description=description,
     )

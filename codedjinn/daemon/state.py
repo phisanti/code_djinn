@@ -316,7 +316,7 @@ class DaemonState:
     def _load_sessions_from_disk(self) -> None:
         """Load existing sessions and conversation histories from disk on daemon startup."""
         import json
-        session_dir = Path.home() / ".config/codedjinn/sessions"
+        session_dir = Path.home() / ".local/share/codedjinn/sessions"
 
         if not session_dir.exists():
             return
@@ -355,7 +355,7 @@ class DaemonState:
     def persist_sessions(self) -> None:
         """Persist all sessions and conversation histories to disk (called on shutdown)."""
         import json
-        session_dir = Path.home() / ".config/codedjinn/sessions"
+        session_dir = Path.home() / ".local/share/codedjinn/sessions"
         session_dir.mkdir(parents=True, exist_ok=True)
 
         for session_name, data in self.sessions.items():

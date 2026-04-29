@@ -34,8 +34,8 @@ class Session:
     2. Conversation history (last N exchanges for multi-command workflows)
 
     Files:
-    - ~/.config/codedjinn/sessions/{session_name}.json - Last command
-    - ~/.config/codedjinn/sessions/{session_name}_history.json - Full history (last N exchanges)
+    - ~/.local/share/codedjinn/sessions/{session_name}.json - Last command
+    - ~/.local/share/codedjinn/sessions/{session_name}_history.json - Full history (last N exchanges)
 
     Phase 4 enhancement: Conversation history enables ask mode to reference
     multiple previous commands for better multi-step reasoning.
@@ -52,7 +52,7 @@ class Session:
                          Future: Could support multiple named sessions
         """
         self.session_name = session_name
-        self.session_dir = Path.home() / ".config/codedjinn/sessions"
+        self.session_dir = Path.home() / ".local/share/codedjinn/sessions"
         self.session_file = self.session_dir / f"{session_name}.json"
         self.history_file = self.session_dir / f"{session_name}_history.json"
 
