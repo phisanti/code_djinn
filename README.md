@@ -47,7 +47,7 @@ This interactive wizard will prompt you for:
 - Your shell (auto-detected: bash, zsh, fish, etc.)
 - Your preferred LLM provider (currently supports **MistralAI**)
 - Your Mistral API key ([get one here](https://console.mistral.ai/))
-- Model selection (mistral-small-latest, codestral-latest, etc.)
+- Model selection (`mistral-small-latest`, `codestral-latest`, `devstral-latest`, etc.)
 
 ## Quick Start
 
@@ -80,12 +80,17 @@ code-djinn ask "what network connections does process 1234 have?"
 # Ask about code or files
 code-djinn ask "where is the database connection configured?"
 code-djinn ask "explain the error in the last output"
+code-djinn ask "what is the content of README.md"
+
+# Use more reasoning steps for broader searches
+code-djinn ask "/search where is the auth middleware?" --steps 3
 
 # Start fresh (ignore previous context)
+code-djinn ask "list python files" --no-context
 code-djinn run "list python files" --no-context
 ```
 
-Ask mode can read files, run safe observation commands (`ps`, `pgrep`, `lsof`, `netstat`, `git log`, etc.) and search code — without executing any destructive commands.
+Ask mode can read files, run safe observation commands (`rg`, `ps`, `pgrep`, `lsof`, `netstat`, `git log`, etc.), and search code — without executing any destructive commands. The default is fast single-shot mode (`--steps 0`); use `--steps N` or `--step N` for multi-step investigation.
 
 ### Daemon Management
 
@@ -106,7 +111,7 @@ Pin files into ask/run context so the agent can reference them without you quoti
 
 ```bash
 code-djinn context add src/main.py           # Add file (default 10m duration)
-code-djinn context add src/main.py -d 1h     # Add with 1-hour expiry
+code-djinn context add src/main.py --duration 1h  # Add with 1-hour expiry
 code-djinn context list                       # Show active context files
 code-djinn context drop src/main.py          # Remove a file
 code-djinn context clear                      # Clear all file context
@@ -122,6 +127,10 @@ code-djinn settings init
 
 # Edit config file directly
 code-djinn settings edit
+
+# Manage reusable ask skills
+code-djinn settings list-skills
+code-djinn settings add-skill search
 ```
 
 ## Available Commands
@@ -130,13 +139,18 @@ code-djinn settings edit
 # Generate and execute commands
 code-djinn run "your request"              # Generate and execute with confirmation
 code-djinn run "your request" -v           # Show command before execution
+code-djinn run "your request" --silent     # Do not echo the generated command
 code-djinn run "your request" --no-confirm # Skip safety confirmation
 code-djinn run "your request" --no-context # Ignore previous command context
+code-djinn run "your request" --add-context src/main.py # Include files
 
 # Ask questions / observe system
 code-djinn ask "your question"             # Analyze output, read files, observe processes
 code-djinn ask "your question" -v          # Verbose output
 code-djinn ask "your question" --no-context # Ignore previous context
+code-djinn ask "your question" --steps 3   # Multi-step investigation
+code-djinn ask "your question" --step 3    # Same as --steps 3
+code-djinn ask "/search your question"     # Activate a reusable skill
 
 # Daemon management
 code-djinn daemon status                   # Check if daemon is running
@@ -154,6 +168,11 @@ code-djinn context clear                   # Clear all file context
 code-djinn settings init                   # Interactive configuration wizard
 code-djinn settings show                   # Display current configuration
 code-djinn settings edit                   # Open config file in $EDITOR
+code-djinn settings list-skills            # List reusable ask skills
+code-djinn settings add-skill <name>       # Create a skill interactively
+code-djinn settings show-skill <name>      # Display a skill definition
+code-djinn settings edit-skill <name>      # Edit a skill in $EDITOR
+code-djinn settings remove-skill <name>    # Delete a skill
 ```
 
 ## Key Features
@@ -164,6 +183,7 @@ code-djinn settings edit                   # Open config file in $EDITOR
 - **Real-time Streaming**: Command output streams directly to your terminal
 - **Background Daemon**: Keeps the Mistral client warm for ~5ms response overhead (vs ~900ms cold start)
 - **File Context Pinning**: Attach files to the session so the agent references them automatically
+- **Reusable Ask Skills**: Define `/skill` shortcuts with step budgets and extra read-only commands
 - **Smart Parsing**: Handles both XML-structured and plain text LLM responses
 - **Session Management**: Persistent context across CLI invocations
 
@@ -173,9 +193,9 @@ code-djinn settings edit                   # Open config file in $EDITOR
 - **MistralAI** (native implementation, no langchain dependency)
   - `mistral-small-latest` - Fast, general-purpose model
   - `codestral-latest` - Optimized for code generation
-  - `devstral-medium-latest` - Balanced performance/quality
+  - `devstral-latest` - Balanced performance/quality
 
-**Legacy (may be deprecated):**
+**Legacy provider modules (not selectable in the current settings wizard):**
 - DeepInfra (via langchain) - QwQ-32B, Qwen2.5-Coder-32B
 - Google Gemini (via langchain) - gemini-2.0-flash
 
@@ -196,7 +216,7 @@ Use the `--help` flag to see all available options:
 ╭─ Commands ───────────────────────────────────────────────────────────────╮
 │ ask       Ask a question about the previous command output (no execution)│
 │ run       Generate and execute a shell command.                          │
-│ settings  Manage Code Djinn configuration.                               │
+│ settings  Manage Code Djinn configuration and skills.                    │
 │ daemon    Manage the Code Djinn daemon.                                  │
 │ context   Manage file context for Code Djinn.                            │
 ╰──────────────────────────────────────────────────────────────────────────╯
