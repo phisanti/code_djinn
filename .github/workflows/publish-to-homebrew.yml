@@ -15,7 +15,7 @@ jobs:
     steps:
       # 1. Check out your code repo to read the tag
       - name: Checkout code_djinn
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -41,7 +41,7 @@ jobs:
 
       # 5. Check out your Homebrew tap repo
       - name: Checkout homebrew-code-djinn tap
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: phisanti/homebrew-code-djinn
           token: ${{ secrets.HOMEBREW_TOKEN }}
