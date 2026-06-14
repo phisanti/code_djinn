@@ -28,7 +28,12 @@ if TYPE_CHECKING:
 
 class MistralAgent:
     """
-    Mistral-native agent implementation without langchain overhead.
+    Adapter between Code Djinn workflows and Mistral chat/tool calls.
+
+    The class owns provider-specific message construction, tool-call execution,
+    and response normalization. Context collection, shell execution, and tool
+    schema definitions live in neighboring modules so this file stays focused on
+    the Mistral protocol.
 
     Performance-focused design with three initialization paths:
     1. Daemon mode: Use pre-initialized client (fastest, ~0ms overhead)
@@ -150,6 +155,9 @@ class MistralAgent:
         Returns:
             Dict with 'answer' and 'tool_calls' for accountability.
         """
+        # Exact file-content reads are deterministic and common in ask mode.
+        # Handling them before model dispatch avoids latency and prevents the
+        # model from hallucinating that a present file is missing.
         direct_file_answer = self._maybe_answer_file_content_question(
             question=question,
             file_executor=AskToolExecutor(cwd=str(context['cwd'])),
@@ -157,8 +165,6 @@ class MistralAgent:
         if direct_file_answer is not None:
             return direct_file_answer
 
-        # Single-shot mode: use legacy implementation for now
-        # (will be refactored separately to use new pattern)
         if max_steps == 1:
             return self._analyze_single_shot(
                 question, context, previous_context, conversation_history,
@@ -181,7 +187,12 @@ class MistralAgent:
         context_result=None,
     ) -> dict:
         """
-        Fast ask mode: answer directly unless a read-only tool is needed.
+        Answer an ask request with at most one model-selected tool round.
+
+        This is the default path for short questions. The model can answer from
+        context directly or request one read-only tool call; if it does use a
+        tool, we immediately follow up with the tool result and ask for a final
+        text answer.
         """
         file_executor = AskToolExecutor(cwd=str(context['cwd']))
         observe_executor = ObserveExecutor(cwd=str(context['cwd']), extra_commands=extra_commands)
@@ -207,7 +218,9 @@ class MistralAgent:
 
         message = response.choices[0].message
 
-        # Execute tool and follow up for answer
+        # Single-shot mode intentionally executes only the first requested tool.
+        # That keeps latency predictable for the default `ask` path; users can
+        # opt into multi-step mode when a question needs iterative search.
         if hasattr(message, 'tool_calls') and message.tool_calls:
             for tool_call in message.tool_calls:
                 tool_name = tool_call.function.name
@@ -268,6 +281,7 @@ class MistralAgent:
         return {"answer": answer, "tool_calls": tool_calls_executed}
 
     def _maybe_answer_file_content_question(self, question: str, file_executor: AskToolExecutor) -> dict | None:
+        """Compatibility wrapper around the deterministic file-content helper."""
         return maybe_answer_file_content_question(question, file_executor)
 
     def _analyze_multi_step(
@@ -284,9 +298,10 @@ class MistralAgent:
         """
         Multi-step ask mode: maintain full conversation history across steps.
 
-        NEW IMPLEMENTATION: Preserves full message array with assistant responses
-        and tool results. System prompt built once, step metadata added as user
-        messages. This follows Mistral API's intended multi-turn pattern.
+        This path preserves the full message array with assistant responses and
+        tool results. The system prompt is built once, while step metadata is
+        added as user messages. Rebuilding the system prompt each step would
+        duplicate context and make tool-result grounding less reliable.
 
         Design:
         1. Build base system prompt once (includes all context)
@@ -305,8 +320,8 @@ class MistralAgent:
         # Initialize step budget tracking
         session_state = init_session_state_for_steps(max_steps)
 
-        # Build base system prompt ONCE (includes all context)
-        # This is set at the beginning and NOT rebuilt on each iteration
+        # Build the base prompt once. Tool results are appended as tool messages
+        # so the model can ground later steps in the exact evidence it asked for.
         system_prompt = self._build_ask_step_prompt(
             question=question,
             step_number=1,
@@ -329,7 +344,9 @@ class MistralAgent:
         for step_num in range(1, max_steps + 1):
             refresh_step_context(session_state)
 
-            # Add step context as user message for progress tracking
+            # Step guidance is sent as user text rather than mutating the system
+            # prompt. That preserves a stable instruction hierarchy while still
+            # nudging the model to finish as the budget shrinks.
             remaining = max_steps - step_num + 1
 
             if step_num >= max_steps:
@@ -373,7 +390,9 @@ class MistralAgent:
             choice = response.choices[0]
             assistant_message = choice.message
 
-            # If we hit the token limit, recover the best available partial answer
+            # Mistral can truncate either normal text or JSON tool arguments at
+            # the token limit. Recovering partial text is better than returning
+            # an empty answer after the user waited through multiple steps.
             if choice.finish_reason == "length":
                 content = getattr(assistant_message, "content", "") or ""
                 if isinstance(content, list):
@@ -410,7 +429,9 @@ class MistralAgent:
                     ]
                 })
 
-                # Process each tool call (defer finish_reasoning to the end)
+                # Mistral may emit evidence-gathering tools and finish_reasoning
+                # in the same response. Execute evidence tools first so a final
+                # answer never ignores data requested in that same turn.
                 finish_call = None
                 for tool_call in assistant_message.tool_calls:
                     tool_name = tool_call.function.name
@@ -444,7 +465,8 @@ class MistralAgent:
                             'output': file_content[:200] + "..." if len(file_content) > 200 else file_content
                         })
 
-                        # Append tool result to conversation (FULL content, no truncation)
+                        # Keep full tool content in the conversation. The short
+                        # preview in tool_calls_executed is only for UI display.
                         messages.append({
                             "role": "tool",
                             "content": file_content,
@@ -464,7 +486,8 @@ class MistralAgent:
                             'output': command_output[:200] + "..." if len(command_output) > 200 else command_output
                         })
 
-                        # Append tool result to conversation (FULL content, no truncation)
+                        # Keep full command output in the model context; only
+                        # the user-facing accountability preview is truncated.
                         messages.append({
                             "role": "tool",
                             "content": command_output,
@@ -559,9 +582,11 @@ Please provide your answer based on this evidence."""
             return f"Based on the investigation:\n\n{evidence_text}"
 
     def _format_observations_xml(self, observations: list) -> str:
+        """Compatibility wrapper for tests/tools expecting XML observations."""
         return format_observations_xml(observations)
 
     def _format_observations_for_synthesis(self, observations: list) -> str:
+        """Compatibility wrapper for tests/tools expecting text observations."""
         return format_observations_for_synthesis(observations)
 
     def _follow_up_with_tool_result(
@@ -636,8 +661,10 @@ Please provide your answer based on this evidence."""
         conversation_history: list = None,
         context_result=None,
     ) -> str:
-        """Build system prompt for run mode."""
+        """Build the run-mode system prompt from cached or fresh context."""
         if context_result is not None:
+            # Daemon callers pass a cached ContextualiserResult so prompt
+            # construction does not repeat shell history and project scans.
             base = build_run_prompt(context_result)
         else:
             base = build_prompt(
@@ -688,8 +715,10 @@ Please provide your answer based on this evidence."""
         skill=None,
         context_result=None,
     ) -> str:
-        """Build system prompt for ask mode (single-shot)."""
+        """Build the single-shot ask prompt from cached or fresh context."""
         if context_result is not None:
+            # Daemon callers pass a cached ContextualiserResult so prompt
+            # construction does not repeat shell history and project scans.
             base = build_ask_prompt(context_result)
         else:
             base = build_prompt(

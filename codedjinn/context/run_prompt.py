@@ -1,4 +1,9 @@
-"""Run-mode system prompt builder for command generation."""
+"""Run-mode system prompt builder for command generation.
+
+Run mode has a narrower job than ask mode: produce one shell command. The prompt
+therefore favors compact execution context and avoids lengthy capability text
+that can slow down common short-command requests.
+"""
 
 from codedjinn.context.contextualiser import ContextualiserResult
 
@@ -51,7 +56,8 @@ Generate shell commands using the execute_shell_command tool.
     if ctx.session_context:
         sections.append(ctx.session_xml)
 
-    # 7. Instructions
+    # Search commands are common enough to deserve explicit defaults; otherwise
+    # models often choose slower recursive grep or overly broad shell pipelines.
     sections.append(f"""<instructions>
 - Generate one concise command that fulfills the user's request.
 - Prefer simple, fast shell tools over multi-command scripts.

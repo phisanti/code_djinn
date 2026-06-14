@@ -29,9 +29,11 @@ from typing import Optional
 
 class ObserveExecutor:
     """Execute safe observation commands for ask mode.
-    
-    Uses a whitelist of safe command patterns to prevent abuse
-    while allowing useful inspection commands.
+
+    The ask agent needs to inspect the repository and local process state, but
+    it must not mutate the user's machine. This executor is the boundary: only
+    commands matching the read-only whitelist, plus skill-approved extras, are
+    allowed to run.
     """
     
     # Max output size (100KB) to prevent context explosion
@@ -40,7 +42,9 @@ class ObserveExecutor:
     # Max command execution time (10 seconds)
     MAX_TIMEOUT = 10.0
     
-    # Whitelist of safe commands (regex patterns)
+    # Whitelist of safe commands (regex patterns). The patterns are command
+    # families rather than exact strings because useful observation often needs
+    # flags, paths, and pipes, but each family is still intentionally read-only.
     SAFE_COMMANDS = [
         # Git commands (read-only)
         r'^git\s+(log|diff|status|show|branch|tag|remote|config|blame)',
@@ -107,6 +111,9 @@ class ObserveExecutor:
         self.cwd = cwd or Path.cwd()
         if extra_commands:
             from codedjinn.skills.loader import EXTRA_COMMANDS_REGISTRY
+            # Skills can widen observation capability for one request. The
+            # loader validates names, but this guard keeps construction robust
+            # if a stale or hand-built SkillConfig reaches the executor.
             self._extra_patterns = [
                 re.compile(EXTRA_COMMANDS_REGISTRY[name])
                 for name in extra_commands
@@ -153,7 +160,9 @@ class ObserveExecutor:
             if result.stderr:
                 output = output + "\n[stderr]\n" + result.stderr
             
-            # Truncate if too large
+            # Keep model context bounded. Full command output can be enormous
+            # for `rg`, `find`, or `lsof`, and ask mode only needs enough
+            # evidence to answer or decide what to inspect next.
             if len(output) > self.MAX_OUTPUT_SIZE:
                 output = output[:self.MAX_OUTPUT_SIZE] + f"\n[... output truncated, showing first {self.MAX_OUTPUT_SIZE} bytes ...]"
             
@@ -165,7 +174,7 @@ class ObserveExecutor:
             return f"Error: Failed to execute command - {str(e)}"
     
     def is_command_safe(self, command: str) -> bool:
-        """Check if command is safe to execute.
+        """Return whether a command belongs to an allowed read-only family.
         
         Args:
             command: Command to validate

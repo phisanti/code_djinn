@@ -1,4 +1,10 @@
-"""Ask-mode system prompt builder for lightweight analysis."""
+"""Ask-mode system prompt builder for lightweight analysis.
+
+Ask prompts are deliberately compact because this command is used for short
+questions. Detailed capability lists live in tool schemas and executors; this
+prompt tells the model how to decide between direct answers and read-only
+inspection.
+"""
 
 from codedjinn.context.contextualiser import ContextualiserResult
 
@@ -37,7 +43,8 @@ Answer from the provided context first. Use read-only tools only when extra file
     if ctx.file_context and not ctx.file_context.is_empty():
         sections.append(ctx.file_xml)
 
-    # 4. Session context (critical for ask mode)
+    # Session context is the main reason ask mode exists. If it is absent, make
+    # that explicit so the model does not pretend to know previous output.
     if ctx.session_context:
         sections.append(ctx.session_xml)
     else:
@@ -47,7 +54,8 @@ Answer from the provided context first. Use read-only tools only when extra file
   <suggestion>Run a command first, then use ask mode to analyze its output.</suggestion>
 </session_context>""")
 
-    # 5. Instructions
+    # Keep search guidance explicit. In practice, "where is X" questions are
+    # common and `rg` gives better file:line evidence than ad hoc file reads.
     sections.append("""<instructions>
 - Prefer a direct answer when session_context or file_context already contains enough evidence.
 - For "which file contains X", "where is X", or similar source searches, use execute_observe_command with `rg -n --hidden --glob '!.git' <pattern> .`; if ripgrep is unavailable, use grep/find.

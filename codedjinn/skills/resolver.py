@@ -1,3 +1,10 @@
+"""Resolve lightweight `/skill` directives embedded in natural-language text.
+
+Skill directives are user-facing shorthand, not shell syntax. The resolver keeps
+that concern out of the CLI command functions: it strips known skill tokens from
+the query body and returns a merged SkillConfig for the provider.
+"""
+
 from __future__ import annotations
 
 import sys
@@ -32,8 +39,8 @@ def resolve_skill(query: str, skills_dir: Path) -> tuple[str, SkillConfig | None
     if not tokens:
         return query, None
 
-    # Load known names once; an empty or missing dir is handled gracefully by
-    # load_all_skill_names (expected to return an empty collection).
+    # Load known names once before scanning so inline directives can be
+    # recognized without repeatedly touching the filesystem.
     known_names: set[str] = set(load_all_skill_names(skills_dir))
 
     directive_tokens: list[str] = []
@@ -47,6 +54,9 @@ def resolve_skill(query: str, skills_dir: Path) -> tuple[str, SkillConfig | None
         skill_name = token[1:]
 
         if skill_name in known_names:
+            # Known skills are directives wherever they appear. This supports
+            # natural phrasing such as "please /search find README" while still
+            # keeping unknown slash tokens in the query body.
             directive_tokens.append(skill_name)
             continue
 

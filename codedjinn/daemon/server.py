@@ -266,7 +266,12 @@ class DaemonServer:
     
     async def _handle_ask(self, request: Dict[str, Any]) -> bytes:
         """
-        Handle 'ask' command - analyze previous output with optional multi-step reasoning.
+        Handle ask requests against the warm daemon state.
+
+        The daemon owns context/session lookup because it can cache that data
+        across CLI invocations. The provider still receives a plain context dict
+        for compatibility, plus the richer ContextualiserResult so prompt
+        building does not repeat project and shell-history scans.
         """
         query = request.get("query", "")
         cwd = request.get("cwd", str(Path.cwd()))
@@ -296,7 +301,9 @@ class DaemonServer:
                 client=self.state.mistral_client,
             )
             
-            # Build context dict
+            # Build the rich context once inside the daemon. Passing this object
+            # through to MistralAgent avoids a second context scan in provider
+            # prompt construction while preserving the older dict API below.
             os_name = self.state.config.get("os", "Linux")
             shell = self.state.config.get("shell", "bash")
             context_result = self.state.get_context(

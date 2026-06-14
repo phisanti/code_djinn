@@ -155,6 +155,8 @@ def ask(
     from codedjinn.skills import resolve_skill, SKILLS_DIR
     query, skill = resolve_skill(query, SKILLS_DIR)
     extra_commands = skill.extra_commands if skill else []
+    # steps=0 means fast single-shot ask. Skills can raise that budget, while
+    # an explicit --steps/--step value always wins over the skill default.
     effective_steps = steps if steps > 0 else (skill.steps if skill else 0)
     if verbose and skill:
         typer.echo(f"[skill: {skill.name} - steps={skill.steps}, extra_commands={extra_commands}]", err=True)

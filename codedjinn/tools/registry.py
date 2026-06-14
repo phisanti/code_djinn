@@ -1,4 +1,9 @@
-"""Mistral tool schema builder for shell execution."""
+"""Mistral tool schema builders.
+
+Tool schemas are prompt surface area. Keeping them short improves latency and
+reduces the chance that the model follows long capability prose instead of the
+current user request.
+"""
 
 
 def build_mistral_tool_schema(os_name: str, shell: str) -> list[dict]:
@@ -81,6 +86,8 @@ def build_ask_tool_schema() -> list[dict]:
     Note:
         These tools are used exclusively in ask mode for multi-step
         reasoning. Run mode uses different tools (execute_shell_command).
+        The descriptions intentionally nudge the model toward `rg` for broad
+        repository search and `read_file` only after a specific target exists.
     """
     return [
         {

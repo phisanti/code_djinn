@@ -1,4 +1,9 @@
-"""Small ask-mode helper functions used by provider implementations."""
+"""Ask-mode helpers that keep provider classes focused on API orchestration.
+
+The functions here are provider-neutral. They handle deterministic request
+processing that should not require an LLM round trip, plus compatibility
+formatting for older multi-step tests.
+"""
 
 import re
 from typing import Any
@@ -14,6 +19,9 @@ CONTENT_INTENTS = (
     "what's in",
 )
 DIRECT_READ_VERBS = ("read", "show", "display", "cat", "open")
+# These terms usually mean "find references or locations" rather than "show the
+# literal file body". Keeping them separate avoids turning search questions into
+# direct reads just because the user used the word "show".
 LOCATION_INTENTS = (
     " where ",
     "referenc",
@@ -32,7 +40,17 @@ def maybe_answer_file_content_question(
     question: str,
     file_executor: AskToolExecutor,
 ) -> dict[str, Any] | None:
-    """Directly read an explicit file path for simple content/show requests."""
+    """Answer explicit file-content questions without calling the model.
+
+    This fast path exists for requests such as "what is the content of
+    README.md" where the user has already provided the exact file. It saves
+    latency and prevents the model from incorrectly claiming a present file is
+    missing.
+
+    Reference/location questions intentionally fall through to normal ask
+    tooling. For example, "show me where README.md is referenced" needs a repo
+    search, not a direct README read.
+    """
     path = _last_explicit_path(question)
     if path is None or not _is_direct_file_read(question, path):
         return None
@@ -53,6 +71,7 @@ def maybe_answer_file_content_question(
 
 
 def _last_explicit_path(question: str) -> str | None:
+    """Return the last filename/path-like token in a user question."""
     matches = FILE_PATH_PATTERN.findall(question)
     if not matches:
         return None
@@ -60,6 +79,7 @@ def _last_explicit_path(question: str) -> str | None:
 
 
 def _is_direct_file_read(question: str, path: str) -> bool:
+    """Decide whether a question asks for file contents, not references."""
     lowered = question.lower()
     content_intent = any(intent in lowered for intent in CONTENT_INTENTS)
     if any(needle in lowered for needle in LOCATION_INTENTS) and not content_intent:
@@ -68,6 +88,7 @@ def _is_direct_file_read(question: str, path: str) -> bool:
 
 
 def _read_verb_targets_path(lowered_question: str, path: str) -> bool:
+    """Check direct read verbs that syntactically target the detected path."""
     path_pattern = re.escape(path).lower()
     verb_pattern = "|".join(DIRECT_READ_VERBS)
     direct_read_pattern = (
@@ -78,7 +99,12 @@ def _read_verb_targets_path(lowered_question: str, path: str) -> bool:
 
 
 def format_observations_xml(observations: list[dict[str, Any]]) -> str:
-    """Format prior observations for compatibility with older tests/tools."""
+    """Render observations as XML for legacy prompt/test compatibility.
+
+    Multi-step ask now keeps tool output in the model message chain. This
+    formatter remains as a stable compatibility surface for older tests and any
+    caller that still builds prompt fragments from observations.
+    """
     if not observations:
         return ""
 
@@ -105,7 +131,7 @@ def format_observations_xml(observations: list[dict[str, Any]]) -> str:
 
 
 def format_observations_for_synthesis(observations: list[dict[str, Any]]) -> str:
-    """Format observations as plain text for fallback synthesis."""
+    """Render observations as compact text for fallback answer synthesis."""
     if not observations:
         return ""
 
