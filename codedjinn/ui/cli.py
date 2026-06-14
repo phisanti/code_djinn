@@ -116,14 +116,14 @@ def _render_tool_calls(tool_calls: list) -> None:
         if tool == "read_file":
             path = tool_call.get("path", "")
             output = tool_call.get("output", "")
-            typer.echo(f"  📄 read_file: {path}")
+            typer.echo(f"  read_file: {path}")
             if context_str:
                 typer.echo(f"     Reason: {context_str}")
             typer.echo(f"     Output: {output}")
         elif tool == "execute_observe_command":
             command = tool_call.get("command", "")
             output = tool_call.get("output", "")
-            typer.echo(f"  🔍 execute_observe_command: {command}")
+            typer.echo(f"  execute_observe_command: {command}")
             if context_str:
                 typer.echo(f"     Reason: {context_str}")
             typer.echo(f"     Output: {output}")
@@ -135,7 +135,7 @@ def ask(
     query: str = typer.Argument(..., help="Question about previous command output"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
     no_context: bool = typer.Option(False, "--no-context", help="Ignore previous context"),
-    steps: int = typer.Option(0, "--steps", min=0, max=10, help="Reasoning steps (0-10, default 0=fast, use --steps 3 for multi-step)"),
+    steps: int = typer.Option(0, "--steps", "--step", min=0, max=10, help="Reasoning steps (0-10, default 0=fast, use --steps 3 for multi-step)"),
     no_daemon: bool = typer.Option(False, "--no-daemon", help="Force direct mode (no daemon)"),
 ) -> None:
     """
@@ -157,7 +157,7 @@ def ask(
     extra_commands = skill.extra_commands if skill else []
     effective_steps = steps if steps > 0 else (skill.steps if skill else 0)
     if verbose and skill:
-        typer.echo(f"[skill: {skill.name} — steps={skill.steps}, extra_commands={extra_commands}]", err=True)
+        typer.echo(f"[skill: {skill.name} - steps={skill.steps}, extra_commands={extra_commands}]", err=True)
 
     # Try daemon mode first (faster if available)
     if _should_use_daemon() and not no_daemon:
@@ -172,22 +172,12 @@ def ask(
                 skill=skill,
             )
             if success:
-                # Display tool calls for accountability (always show)
-                _render_tool_calls(result.get("tool_calls", []))
+                if verbose:
+                    _render_tool_calls(result.get("tool_calls", []))
 
                 # Display the answer
                 answer = result.get("response", "")
                 typer.echo(answer)
-
-                # Save ask result to session for continuity
-                if not no_context:
-                    trimmed_answer = trim_output(answer, max_lines=30, max_chars=2000)
-                    client.save_session(
-                        session_name="default",
-                        command=f"ask: {query}",
-                        output=trimmed_answer,
-                        exit_code=0,
-                    )
                 return
             # Fall through to direct mode on error
 
@@ -213,8 +203,8 @@ def ask(
             skill=skill,
         )
 
-        # Display tool calls for accountability (always show)
-        _render_tool_calls(result.get("tool_calls", []))
+        if verbose:
+            _render_tool_calls(result.get("tool_calls", []))
 
         # Display the answer
         answer = result.get("answer", "")
@@ -237,7 +227,7 @@ def run(
     no_confirm: bool = typer.Option(False, "--no-confirm", help="Skip safety confirmation"),
     no_context: bool = typer.Option(False, "--no-context", help="Ignore previous context"),
     no_daemon: bool = typer.Option(False, "--no-daemon", help="Force direct mode (no daemon)"),
-    steps: int = typer.Option(0, "--steps", min=0, help="Tool call budget (currently only 0 supported)"),
+    steps: int = typer.Option(0, "--steps", "--step", min=0, help="Tool call budget (currently only 0 supported)"),
     add_context: Optional[str] = typer.Option(None, "--add-context", help="Add files to context (comma-separated)"),
 ) -> None:
     """

@@ -255,6 +255,7 @@ class DaemonServer:
                 context=context,
                 previous_context=previous_context,
                 conversation_history=conversation_history,
+                context_result=context_result,
             )
             
             return serialize_response("ok", result={"command": command})
@@ -298,6 +299,13 @@ class DaemonServer:
             # Build context dict
             os_name = self.state.config.get("os", "Linux")
             shell = self.state.config.get("shell", "bash")
+            context_result = self.state.get_context(
+                cwd=cwd,
+                os_name=os_name,
+                shell=shell,
+                session_context=previous_context,
+                session_name=session_name,
+            )
             context = {
                 "cwd": Path(cwd),
                 "os_name": os_name,
@@ -323,6 +331,7 @@ class DaemonServer:
                 conversation_history=conversation_history,
                 extra_commands=skill.extra_commands if skill else None,
                 skill=skill,
+                context_result=context_result,
             )
             # analyze() returns dict with answer and tool_calls
             answer = response_data.get("answer", "")

@@ -1,8 +1,4 @@
-"""Run-mode system prompt builder for command generation with tool calling.
-
-This module builds the system prompt for run mode, which uses the LLM's
-tool calling capability to execute shell commands.
-"""
+"""Run-mode system prompt builder for command generation."""
 
 from codedjinn.context.contextualiser import ContextualiserResult
 
@@ -11,7 +7,8 @@ def build_run_prompt(ctx: ContextualiserResult) -> str:
     """
     Build system prompt for run mode.
 
-    This mode uses tool calling - the LLM calls execute_shell_command tool.
+    This mode uses tool calling: the model returns one shell command through
+    execute_shell_command.
 
     Args:
         ctx: ContextualiserResult from contextualiser.contextualise()
@@ -35,44 +32,36 @@ You are Code Djinn - a {ctx.system_context.os_name} shell command assistant usin
 Generate shell commands using the execute_shell_command tool.
 </role>""")
 
-    # 2. Tool capabilities
-    sections.append(ctx.capabilities_xml)
-
-    # 3. System context (always present)
+    # 2. System context (always present)
     sections.append(ctx.system_xml)
 
-    # 4. Shell history (if available)
+    # 3. Shell history (if available)
     if ctx.shellhist_context.recent_commands:
         sections.append(ctx.shellhist_xml)
 
-    # 5. Local project context (if available)
+    # 4. Local project context (if available)
     if ctx.localproject_context:
         sections.append(ctx.project_xml)
 
-    # 6. File context (user-added files)
+    # 5. File context (user-added files)
     if ctx.file_context and not ctx.file_context.is_empty():
         sections.append(ctx.file_xml)
 
-    # 7. Session context (if available)
+    # 6. Session context (if available)
     if ctx.session_context:
         sections.append(ctx.session_xml)
 
-    # 8. Instructions
+    # 7. Instructions
     sections.append(f"""<instructions>
-- Generate concise, appropriate commands for the user's request
-- Consider working directory, project context, and command history
-- Leverage shell history to understand the user's workflow
+- Generate one concise command that fulfills the user's request.
+- Prefer simple, fast shell tools over multi-command scripts.
+- For file-content searches, prefer `rg -n --hidden --glob '!.git' <pattern> .`; if ripgrep is unavailable, use grep/find.
+- For filename searches, prefer `find . -name <pattern>` or `rg --files | rg <pattern>`.
+- Consider working directory, project context, and command history only when relevant.
 - Use proper {ctx.system_context.shell} syntax for {ctx.system_context.os_name}
 - When user references "that file" or "the error", check session_context
 - When files are in <file_context>, use them to understand code structure
-- Avoid full-screen TUI programs (htop, vim, less, etc.) - prefer text-output commands like ps, grep, cat
-
-Context management tips (for multi-step analysis):
-- If user needs deep file analysis, suggest: code-djinn context add <file> --duration 30m
-- Files in context persist across commands until expiration (default 10 min)
-- To view current context: code-djinn context list
-- To clear context: code-djinn context clear
-- For quick one-off file reads, prefer cat/head instead of adding to context
+- Avoid full-screen TUI programs such as htop, vim, and less; prefer commands that print and exit.
 </instructions>""")
 
     return "\n\n".join(sections)

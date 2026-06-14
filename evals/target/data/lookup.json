@@ -1,0 +1,14 @@
+{
+  "artifact-17": {
+    "owner": "Ivo Lane",
+    "priority": "low"
+  },
+  "artifact-42": {
+    "owner": "Mira Sol",
+    "priority": "high"
+  },
+  "artifact-99": {
+    "owner": "Tala Reed",
+    "priority": "medium"
+  }
+}

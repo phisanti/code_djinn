@@ -2,7 +2,7 @@
 
 Allows the ask agent to run read-only observation commands like:
 - git: git log, git diff, git status, git show, git branch
-- file inspection: ls, cat, grep, head, tail, find, file
+- file inspection: ls, cat, grep, rg, head, tail, find, file
 - process lookup: pgrep (find PID by name), ps (with flags), pstree
 - process detail: lsof (open files/sockets per process), lsof -i (network)
 - system info: df, du, free, vm_stat, uname, date, wc
@@ -46,7 +46,8 @@ class ObserveExecutor:
         r'^git\s+(log|diff|status|show|branch|tag|remote|config|blame)',
 
         # File inspection
-        r'^(ls|cat|grep|head|tail|find|file|wc|od)\s+',
+        r'^(ls|cat|grep|rg|head|tail|find|file|wc|od)\s+',
+        r'^rg\s*$',
         r'^(ls|pwd|whoami|date|uname)(\s.*)?$',
 
         # Process observation (enhanced for memory/CPU queries)

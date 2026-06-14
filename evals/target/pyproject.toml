@@ -1,0 +1,8 @@
+[project]
+name = "djinn-sample-service"
+version = "0.1.0"
+description = "Dummy project for Code Djinn evals"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,7 @@
+[service]
+name = "djinn-sample"
+region = "eu-central-1"
+
+[features]
+retry_monitor = true
+quartz_beacon = true

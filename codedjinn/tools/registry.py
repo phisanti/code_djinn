@@ -35,8 +35,8 @@ def build_mistral_tool_schema(os_name: str, shell: str) -> list[dict]:
             "name": "execute_shell_command",
             "description": (
                 f"Execute a {shell} command on {os_name}. "
-                "Use this tool to fulfill the user's request by generating "
-                "the appropriate shell command."
+                "Return the single shell command that fulfills the user's request. "
+                "Prefer fast standard CLI tools; use ripgrep (`rg`) for repository searches when available."
             ),
             "parameters": {
                 "type": "object",
@@ -44,8 +44,7 @@ def build_mistral_tool_schema(os_name: str, shell: str) -> list[dict]:
                     "command": {
                         "type": "string",
                         "description": (
-                            "The exact shell command to execute. "
-                            "Should be a valid command for the user's shell environment."
+                            "The exact command to execute in the user's shell."
                         )
                     }
                 },
@@ -89,9 +88,8 @@ def build_ask_tool_schema() -> list[dict]:
             "function": {
                 "name": "read_file",
                 "description": (
-                    "Read file contents to gather context for answering questions. "
-                    "Use this to understand code, configuration, or other files relevant to your analysis. "
-                    "Can read files in current directory or home directory (~/)."
+                    "Read a specific text file when its contents are needed to answer the question. "
+                    "Use after locating the relevant file, not for broad search."
                 ),
                 "parameters": {
                     "type": "object",
@@ -99,16 +97,13 @@ def build_ask_tool_schema() -> list[dict]:
                         "path": {
                             "type": "string",
                             "description": (
-                                "Path to file to read. "
-                                "Use relative paths (./file.py), home paths (~/Documents/file.txt), "
-                                "or absolute paths within cwd."
+                                "Relative path, home path (~/...), or absolute path within cwd."
                             )
                         },
                         "context": {
                             "type": "string",
                             "description": (
-                                "Why you're reading this file - what context are you gathering? "
-                                "Example: 'to understand database schema' or 'to see error handling'"
+                                "Brief reason for reading this file."
                             ),
                             "optional": True
                         }
@@ -122,23 +117,11 @@ def build_ask_tool_schema() -> list[dict]:
             "function": {
                 "name": "execute_observe_command",
                 "description": (
-                    "Execute safe read-only observation commands for gathering context. "
-                    "Allowed commands include: "
-                    "git (log/diff/status), ls, cat, grep, find, diff, "
-                    "ps (with flags like 'aux', '-m', '-eo'), top (batch mode: -l/-b/-n), "
-                    "pgrep (find processes by name), lsof (open files/network sockets per process), "
-                    "pstree (process hierarchy), netstat / ss (network connections), "
-                    "pidstat (Linux per-process stats), "
-                    "df, du, free, vm_stat, and other system inspection tools. "
-                    "Use this to inspect processes, memory usage, system state, version control history, or file listings. "
-                    "Process investigation workflow: "
-                    "1. Find PID: 'pgrep <name>' or 'ps aux | grep <name>'; "
-                    "2. Inspect files/sockets: 'lsof -p <pid>'; "
-                    "3. Check network: 'lsof -i' or 'netstat -an | grep <port>'. "
-                    "Examples: "
-                    "macOS: 'pgrep -la hq', 'lsof -p 1234', 'ps aux -m | head -10', 'top -l 1 | head -20'; "
-                    "Linux: 'pgrep -a hq', 'lsof -p 1234', 'ss -tulnp', 'ps aux --sort=-%mem | head -10', 'top -b -n 1 | head -20', 'free -h'. "
-                    "No destructive commands allowed."
+                    "Execute safe read-only observation commands for quick evidence gathering. "
+                    "Use `rg -n --hidden --glob '!.git' <pattern> .` for content search, "
+                    "`rg --files` or find for filenames, and focused git/ls/cat/head/tail/sed/awk/wc/diff commands for inspection. "
+                    "Process/system diagnostics are also allowed with focused pgrep, ps, lsof, df, du, vm_stat, free, netstat, or ss commands. "
+                    "No destructive commands."
                 ),
                 "parameters": {
                     "type": "object",
@@ -146,15 +129,13 @@ def build_ask_tool_schema() -> list[dict]:
                         "command": {
                             "type": "string",
                             "description": (
-                                "Safe observation command to execute. "
-                                "Examples: 'git log --oneline -5', 'ls -la src/', 'grep -r \"pattern\" .' "
+                                "Safe read-only command to execute. Examples: `rg -n \"pattern\" .`, `rg --files | rg \"config\"`, `git status --short`."
                             )
                         },
                         "context": {
                             "type": "string",
                             "description": (
-                                "Why you're running this command - what context do you need? "
-                                "Example: 'to see recent changes in the repository'"
+                                "Brief reason for running this command."
                             ),
                             "optional": True
                         }
@@ -168,9 +149,7 @@ def build_ask_tool_schema() -> list[dict]:
             "function": {
                 "name": "finish_reasoning",
                 "description": (
-                    "Provide your final answer and complete the reasoning process. "
-                    "Use this when you have gathered enough information to answer the question. "
-                    "You can stop early if you've reached a conclusion before using all available steps."
+                    "Provide the final answer once enough evidence has been gathered. Stop early when possible."
                 ),
                 "parameters": {
                     "type": "object",
@@ -178,8 +157,7 @@ def build_ask_tool_schema() -> list[dict]:
                         "answer": {
                             "type": "string",
                             "description": (
-                                "Your final answer to the user's original question. "
-                                "Should be comprehensive and grounded in the evidence you gathered."
+                                "Final answer to the user's original question, grounded in gathered evidence."
                             )
                         }
                     },

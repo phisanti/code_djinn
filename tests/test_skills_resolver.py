@@ -51,13 +51,13 @@ def test_paths_in_body_untouched(tmp_path):
     assert skill is not None
 
 
-def test_non_leading_slash_token_unchanged(tmp_path):
+def test_inline_slash_skill_matches_known_skill(tmp_path):
     _write_skill(tmp_path, "search")
-    # The /search token is NOT the first token here
     query = "please /search in /myfolder"
     clean, skill = resolve_skill(query, tmp_path)
-    assert clean == query
-    assert skill is None
+    assert clean == "please in /myfolder"
+    assert skill is not None
+    assert skill.name == "search"
 
 
 def test_unknown_leading_skill_warns_and_returns_unchanged(tmp_path, capsys):

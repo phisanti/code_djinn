@@ -4,11 +4,18 @@ import json
 from typing import Optional, TYPE_CHECKING
 
 from codedjinn.core.client_cache import get_cached_client
+from codedjinn.providers.ask_helpers import (
+    format_observations_for_synthesis,
+    format_observations_xml,
+    maybe_answer_file_content_question,
+)
 from codedjinn.tools.registry import build_mistral_tool_schema, build_ask_tool_schema
 from codedjinn.tools.ask_executor import AskToolExecutor
 from codedjinn.tools.observe_executor import ObserveExecutor
 from codedjinn.context import (
     build_prompt,
+    build_run_prompt,
+    build_ask_prompt,
     init_session_state_for_steps,
     advance_step_budget,
     refresh_step_context,
@@ -63,7 +70,8 @@ class MistralAgent:
         query: str,
         context: dict,
         previous_context: dict = None,
-        conversation_history: list = None
+        conversation_history: list = None,
+        context_result=None,
     ) -> str:
         """
         Generate shell command for user query (run mode).
@@ -81,7 +89,9 @@ class MistralAgent:
             Shell command string
         """
         # Build system prompt with full context
-        system_prompt = self._build_system_prompt(context, previous_context, conversation_history)
+        system_prompt = self._build_system_prompt(
+            context, previous_context, conversation_history, context_result=context_result
+        )
 
         # Get tool schema for shell execution
         tools = self._get_tool_schema(context)
@@ -115,6 +125,7 @@ class MistralAgent:
         conversation_history: list = None,
         extra_commands: list = None,
         skill=None,
+        context_result=None,
     ) -> dict:
         """
         Analyze previous output and answer a question (ask mode).
@@ -139,17 +150,24 @@ class MistralAgent:
         Returns:
             Dict with 'answer' and 'tool_calls' for accountability.
         """
+        direct_file_answer = self._maybe_answer_file_content_question(
+            question=question,
+            file_executor=AskToolExecutor(cwd=str(context['cwd'])),
+        )
+        if direct_file_answer is not None:
+            return direct_file_answer
+
         # Single-shot mode: use legacy implementation for now
         # (will be refactored separately to use new pattern)
         if max_steps == 1:
             return self._analyze_single_shot(
                 question, context, previous_context, conversation_history,
-                extra_commands=extra_commands, skill=skill,
+                extra_commands=extra_commands, skill=skill, context_result=context_result,
             )
 
         return self._analyze_multi_step(
             question, context, previous_context, max_steps, conversation_history,
-            extra_commands=extra_commands, skill=skill,
+            extra_commands=extra_commands, skill=skill, context_result=context_result,
         )
 
     def _analyze_single_shot(
@@ -160,19 +178,21 @@ class MistralAgent:
         conversation_history: list = None,
         extra_commands: list = None,
         skill=None,
+        context_result=None,
     ) -> dict:
         """
-        Single-shot ask mode: one tool call, immediate follow-up for answer.
-
-        Legacy implementation maintained for compatibility and performance.
+        Fast ask mode: answer directly unless a read-only tool is needed.
         """
         file_executor = AskToolExecutor(cwd=str(context['cwd']))
         observe_executor = ObserveExecutor(cwd=str(context['cwd']), extra_commands=extra_commands)
         tool_calls_executed = []
 
-        system_prompt = self._build_ask_system_prompt(context, previous_context, conversation_history, skill=skill)
+        system_prompt = self._build_ask_system_prompt(
+            context, previous_context, conversation_history, skill=skill, context_result=context_result
+        )
 
-        # Initial query with forced tool use
+        # Let the model answer directly when context is sufficient. Tool use
+        # remains available for file/repository lookup questions.
         response = self.client.chat.complete(
             model=self.model,
             messages=[
@@ -180,9 +200,9 @@ class MistralAgent:
                 {"role": "user", "content": question},
             ],
             tools=self._get_ask_tools(),
-            tool_choice="any",  # Force tool use
+            tool_choice="auto",
             temperature=0.3,
-            max_tokens=4096,
+            max_tokens=1200,
         )
 
         message = response.choices[0].message
@@ -234,6 +254,10 @@ class MistralAgent:
                     )
                     break
 
+                elif tool_name == "finish_reasoning":
+                    answer = tool_args.get("answer", "").strip()
+                    return {"answer": answer, "tool_calls": tool_calls_executed}
+
         # Extract answer
         content = getattr(message, "content", "")
         if isinstance(content, list):
@@ -242,6 +266,9 @@ class MistralAgent:
             answer = ("" if content is None else str(content)).strip()
 
         return {"answer": answer, "tool_calls": tool_calls_executed}
+
+    def _maybe_answer_file_content_question(self, question: str, file_executor: AskToolExecutor) -> dict | None:
+        return maybe_answer_file_content_question(question, file_executor)
 
     def _analyze_multi_step(
         self,
@@ -252,6 +279,7 @@ class MistralAgent:
         conversation_history: list = None,
         extra_commands: list = None,
         skill=None,
+        context_result=None,
     ) -> dict:
         """
         Multi-step ask mode: maintain full conversation history across steps.
@@ -287,6 +315,7 @@ class MistralAgent:
             previous_context=previous_context,
             conversation_history=conversation_history,
             skill=skill,
+            context_result=context_result,
         )
 
         # Initialize messages array with system + user
@@ -304,39 +333,29 @@ class MistralAgent:
             remaining = max_steps - step_num + 1
 
             if step_num >= max_steps:
-                # Final step urgency
                 step_context = (
-                    f"FINAL STEP ({step_num}/{max_steps}) - THIS IS YOUR LAST CHANCE\n"
-                    f"You have reached the absolute final step. NO MORE STEPS REMAIN after this.\n"
-                    f"IMMEDIATELY use finish_reasoning to provide your final answer.\n"
-                    f"Do not perform additional reads. Synthesize your answer from all gathered evidence."
+                    f"Final step ({step_num}/{max_steps}). "
+                    f"Use finish_reasoning with the best answer from gathered evidence."
                 )
             elif remaining <= 1:
-                # Almost done
                 step_context = (
-                    f"ALMOST DONE (step {step_num}/{max_steps}) - RUSH TO FINISH\n"
-                    f"You have only {remaining} step remaining after this one.\n"
-                    f"Please wrap up your investigation and prepare to call finish_reasoning.\n"
-                    f"Gather any final critical information and prepare your final answer."
+                    f"Step {step_num}/{max_steps}. One step remains after this. "
+                    f"Gather only critical missing evidence, then finish."
                 )
             elif remaining <= 2:
-                # Getting close
                 step_context = (
-                    f"Getting close (step {step_num}/{max_steps}) - Start planning conclusion\n"
-                    f"You have {remaining} step(s) remaining. Plan to finish_reasoning within the next step or two.\n"
-                    f"Continue gathering evidence but keep your final synthesis in mind."
+                    f"Step {step_num}/{max_steps}. {remaining} steps remain. "
+                    f"Keep searches focused and prepare to synthesize."
                 )
             elif step_num == 1:
-                # First step
                 step_context = (
-                    f"Step {step_num}/{max_steps} - Begin your investigation.\n"
-                    f"You have {max_steps} steps available. Search first, then read what you find."
+                    f"Step {step_num}/{max_steps}. Search first for broad file questions, "
+                    f"then read only specific files if needed."
                 )
             else:
-                # Plenty of time
                 step_context = (
-                    f"Step {step_num}/{max_steps} - {remaining} step(s) remaining\n"
-                    f"Continue investigating systematically. You have plenty of steps remaining to be thorough."
+                    f"Step {step_num}/{max_steps}. {remaining} steps remain. "
+                    f"Continue with the smallest useful read-only check."
                 )
 
             messages.append({"role": "user", "content": step_context})
@@ -348,7 +367,7 @@ class MistralAgent:
                 tools=self._get_ask_tools(),
                 tool_choice="auto",  # Model decides when to use tools
                 temperature=0.3,
-                max_tokens=8192,
+                max_tokens=2048,
             )
 
             choice = response.choices[0]
@@ -529,7 +548,7 @@ Please provide your answer based on this evidence."""
                     {"role": "user", "content": synthesis_prompt}
                 ],
                 temperature=0.3,
-                max_tokens=4096,
+                max_tokens=1200,
             )
 
             content = response.choices[0].message.content
@@ -538,6 +557,12 @@ Please provide your answer based on this evidence."""
         except Exception:
             # If synthesis fails, return formatted evidence
             return f"Based on the investigation:\n\n{evidence_text}"
+
+    def _format_observations_xml(self, observations: list) -> str:
+        return format_observations_xml(observations)
+
+    def _format_observations_for_synthesis(self, observations: list) -> str:
+        return format_observations_for_synthesis(observations)
 
     def _follow_up_with_tool_result(
         self,
@@ -568,7 +593,7 @@ Please provide your answer based on this evidence."""
             },
             {
                 "role": "user",
-                "content": "Based on the output above, please provide your answer to my question. Do not make any additional tool calls."
+                "content": "Answer the question using the tool output above. Keep it concise and do not make more tool calls."
             }
         ]
 
@@ -576,7 +601,7 @@ Please provide your answer based on this evidence."""
             model=self.model,
             messages=messages,
             temperature=0.3,
-            max_tokens=4096,
+            max_tokens=1200,
         )
 
         return response.choices[0].message
@@ -604,15 +629,24 @@ Please provide your answer based on this evidence."""
         )
         return result["answer"]
 
-    def _build_system_prompt(self, context: dict, previous_context: dict = None, conversation_history: list = None) -> str:
+    def _build_system_prompt(
+        self,
+        context: dict,
+        previous_context: dict = None,
+        conversation_history: list = None,
+        context_result=None,
+    ) -> str:
         """Build system prompt for run mode."""
-        base = build_prompt(
-            mode="run",
-            os_name=context['os_name'],
-            shell=context['shell'],
-            cwd=str(context['cwd']),
-            session_context=previous_context,
-        )
+        if context_result is not None:
+            base = build_run_prompt(context_result)
+        else:
+            base = build_prompt(
+                mode="run",
+                os_name=context['os_name'],
+                shell=context['shell'],
+                cwd=str(context['cwd']),
+                session_context=previous_context,
+            )
         if conversation_history:
             base += "\n\n" + self._format_conversation_history_xml(conversation_history)
         return base
@@ -646,15 +680,25 @@ Please provide your answer based on this evidence."""
             f"</active_skill>"
         )
 
-    def _build_ask_system_prompt(self, context: dict, previous_context: dict = None, conversation_history: list = None, skill=None) -> str:
+    def _build_ask_system_prompt(
+        self,
+        context: dict,
+        previous_context: dict = None,
+        conversation_history: list = None,
+        skill=None,
+        context_result=None,
+    ) -> str:
         """Build system prompt for ask mode (single-shot)."""
-        base = build_prompt(
-            mode="ask",
-            os_name=context['os_name'],
-            shell=context['shell'],
-            cwd=str(context['cwd']),
-            session_context=previous_context,
-        )
+        if context_result is not None:
+            base = build_ask_prompt(context_result)
+        else:
+            base = build_prompt(
+                mode="ask",
+                os_name=context['os_name'],
+                shell=context['shell'],
+                cwd=str(context['cwd']),
+                session_context=previous_context,
+            )
         if conversation_history:
             base += "\n\n" + self._format_conversation_history_xml(conversation_history)
         if skill:
@@ -671,6 +715,8 @@ Please provide your answer based on this evidence."""
         previous_context: dict = None,
         conversation_history: list = None,
         skill=None,
+        prior_observations: list = None,
+        context_result=None,
     ) -> str:
         """
         Build prompt for multi-step reasoning (base prompt only, step context added via messages).
@@ -690,18 +736,18 @@ Please provide your answer based on this evidence."""
         Returns:
             Base system prompt for multi-step reasoning
         """
-        from codedjinn.context import contextualise, build_ask_prompt
+        if context_result is not None:
+            base_prompt = build_ask_prompt(context_result)
+        else:
+            from codedjinn.context import contextualise
 
-        # Use existing context infrastructure
-        ctx = contextualise(
-            os_name=context['os_name'],
-            shell=context['shell'],
-            cwd=str(context['cwd']),
-            session_context=previous_context,
-        )
-
-        # Start with base ask prompt
-        base_prompt = build_ask_prompt(ctx)
+            ctx = contextualise(
+                os_name=context['os_name'],
+                shell=context['shell'],
+                cwd=str(context['cwd']),
+                session_context=previous_context,
+            )
+            base_prompt = build_ask_prompt(ctx)
 
         # Skill block leads the prompt so it precedes all other instructions
         sections = []
@@ -713,6 +759,9 @@ Please provide your answer based on this evidence."""
         if conversation_history:
             sections.append(self._format_conversation_history_xml(conversation_history))
 
+        if prior_observations:
+            sections.append(self._format_observations_xml(prior_observations))
+
         # Multi-step reasoning context
         sections.append(f"""<multi_step_reasoning>
 Original question: {question}
@@ -723,12 +772,11 @@ Progress tracking: Step context will be provided as the conversation progresses
         # Tool instructions for multi-step
         skill_note = " Follow the active_skill mandatory_protocol above." if skill else ""
         sections.append(f"""<multi_step_instructions>
-- Use read_file to gather context when needed for a better answer
-- Use execute_observe_command to run safe observation commands
-- When you have enough information, use finish_reasoning to provide final answer
-- You can stop early if you've reached a conclusion before using all steps
-- Each step should build on previous findings in the conversation
-- Stay focused on answering the original question
+- Answer directly when existing context is enough.
+- For broad file/content searches, use execute_observe_command with `rg` before reading files.
+- Use read_file only for specific files that need inspection.
+- Use finish_reasoning as soon as you can answer; you do not need to spend every step.
+- Stay focused on the original question and keep each command narrow.
 - You can reference previous commands in conversation_history for additional context{skill_note}
 </multi_step_instructions>""")
 
@@ -778,4 +826,3 @@ Progress tracking: Step context will be provided as the conversation progresses
     def _get_ask_tools(self) -> list[dict]:
         """Get tool schema for ask mode (delegates to registry)."""
         return build_ask_tool_schema()
-

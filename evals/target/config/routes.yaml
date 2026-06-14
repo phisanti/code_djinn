@@ -1,0 +1,5 @@
+routes:
+  - path: /v1/status
+    handler: djinn_sample.app:build_status
+  - path: /v1/search
+    handler: djinn_sample.search:query_catalog

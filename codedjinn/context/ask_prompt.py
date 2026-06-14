@@ -1,9 +1,4 @@
-"""Ask-mode system prompt builder for analyzing previous output.
-
-Ask mode is a lightweight analysis mode that answers a user question using
-the most recent command and its output as context. It can read files for
-additional context but does not execute any commands.
-"""
+"""Ask-mode system prompt builder for lightweight analysis."""
 
 from codedjinn.context.contextualiser import ContextualiserResult
 
@@ -12,9 +7,8 @@ def build_ask_prompt(ctx: ContextualiserResult) -> str:
     """
     Build system prompt for ask mode.
 
-    This mode supports file reading (via read_file tool) to gather context,
-    but does not execute commands. Focus is on answering questions about
-    previous command output and code/files.
+    This mode answers questions from existing context and can use read-only
+    tools for quick file or repository inspection.
 
     Args:
         ctx: ContextualiserResult from contextualiser.contextualise()
@@ -26,40 +20,24 @@ def build_ask_prompt(ctx: ContextualiserResult) -> str:
         1. <role> - Analysis assistant
         2. <system_context> - OS, shell, cwd
         3. <session_context> - Previous command (critical for ask mode)
-        4. <instructions> - How to analyze
-
-    Tools available:
-        - read_file: Read file contents for additional context
-        - Do NOT use execute_shell_command (not available in ask mode)
-
-    Note: Ask mode typically doesn't need shell history or project context
-          (but we could include them if useful in the future)
+        4. <instructions> - How to answer
     """
     sections = []
 
     # 1. Role description
     sections.append(f"""<role>
-You are Code Djinn - a {ctx.system_context.os_name} command-line assistant and code analyst.
-Answer questions by analyzing provided context, reading files, and running safe observation commands.
-You can read files using the read_file tool and run safe commands using execute_observe_command:
-- File inspection: git, ls, grep, find, cat, head, tail
-- Process observation: ps (with flags), top (batch mode)
-- System info: df, du, free, vm_stat, uname
-- Text processing: sed, awk, cut, sort, uniq
-You do NOT execute destructive commands.
+You are Code Djinn, a concise {ctx.system_context.os_name} command-line assistant for {ctx.system_context.shell}.
+Answer from the provided context first. Use read-only tools only when extra file or repository evidence is needed.
 </role>""")
 
-    # 2. Tool capabilities
-    sections.append(ctx.capabilities_xml)
-
-    # 3. System context
+    # 2. System context
     sections.append(ctx.system_xml)
 
-    # 4. File context (user-added files)
+    # 3. File context (user-added files)
     if ctx.file_context and not ctx.file_context.is_empty():
         sections.append(ctx.file_xml)
 
-    # 5. Session context (critical for ask mode)
+    # 4. Session context (critical for ask mode)
     if ctx.session_context:
         sections.append(ctx.session_xml)
     else:
@@ -69,31 +47,15 @@ You do NOT execute destructive commands.
   <suggestion>Run a command first, then use ask mode to analyze its output.</suggestion>
 </session_context>""")
 
-    # 6. Instructions
+    # 5. Instructions
     sections.append("""<instructions>
-- Base your answer on the previous command output in session_context
-- Use read_file tool to read relevant files when needed for better context
-- Use execute_observe_command for safe inspection commands:
-  * File inspection: git log, ls, grep, find, cat, head, tail
-  * Process lookup: pgrep <name> (find PID), ps aux | grep <name>, pstree
-  * Process detail: lsof -p <PID> (open files/sockets), lsof -i (all network connections)
-  * Memory/CPU: ps aux, top (batch mode), pidstat (Linux)
-  * Network: netstat -an, ss -tulnp (Linux), lsof -i :<port>
-  * Memory/system: free -h (Linux), vm_stat (macOS), df -h, du -sh
-- Each tool call should have clear reasoning in the 'context' parameter for accountability
-- Process investigation workflow (e.g. "what is the hq process doing?"):
-  1. Find PID: 'pgrep -la hq' (macOS/Linux) or 'ps aux | grep hq'
-  2. Inspect open files: 'lsof -p <PID>'
-  3. Check network connections: 'lsof -i' or 'netstat -an | grep <PID>'
-- For process/memory queries, use OS-appropriate syntax:
-  * macOS: 'pgrep -la <name>', 'ps aux -m | head -10', 'top -l 1 | head -20', 'lsof -p <PID>'
-  * Linux: 'pgrep -a <name>', 'ps aux --sort=-%mem | head -10', 'top -b -n 1 | head -20', 'free -h', 'ss -tulnp'
-- If context is insufficient, say so explicitly
-- Respond in plain text or markdown (terminal-friendly format)
-- Be concise but thorough
-- If asked about "the error" or "that file", reference session_context
-- When files are in <file_context>, use them to provide informed analysis
-- Do NOT attempt destructive commands - only safe observation and file reading allowed
+- Prefer a direct answer when session_context or file_context already contains enough evidence.
+- For "which file contains X", "where is X", or similar source searches, use execute_observe_command with `rg -n --hidden --glob '!.git' <pattern> .`; if ripgrep is unavailable, use grep/find.
+- Use read_file only after locating a specific file that needs inspection.
+- For git or directory questions, use focused read-only commands such as git status, git diff, git log, ls, find, head, tail, wc, sed, awk, sort, and uniq.
+- For process or system diagnostics, use focused read-only commands such as pgrep, ps, lsof, df, du, vm_stat, free, netstat, or ss.
+- Never use destructive commands. If evidence is insufficient, say what is missing.
+- Keep answers terminal-friendly and concise. Do not include tool traces unless the UI asks for verbose output.
 </instructions>""")
 
     return "\n\n".join(sections)

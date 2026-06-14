@@ -1,0 +1,5 @@
+event_id,type,message
+evt-001,info,startup complete
+evt-002,info,cache warmed
+evt-003,warning,zeta_index drift detected
+evt-004,info,shutdown requested
