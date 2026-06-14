@@ -27,7 +27,7 @@ PROVIDERS = {
         "models": [
             "codestral-latest",
             "mistral-small-latest",
-            "devstral-medium-latest",
+            "devstral-latest",
         ],
         "api_key_name": "mistral_api_key",
     },
@@ -224,7 +224,7 @@ def configure_provider_model(
         hint = ""
         if m == "codestral-latest":
             hint = " [dim](⚡ Fast, recommended)[/dim]"
-        elif m == "devstral-medium-latest":
+        elif m == "devstral-latest":
             hint = " [dim](🔬 New, slower, 2x cost)[/dim]"
 
         console.print(f"  {idx}. {m}{hint}")
